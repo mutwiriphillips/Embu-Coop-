@@ -1,0 +1,341 @@
+// Embu County Cooperative Management & Governance System
+// Prisma schema — covers Modules 1-5 from the Engineering Scope document.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 1: County Staff & Access Management (RBAC)
+// ---------------------------------------------------------------------------
+
+enum StaffRole {
+  DIRECTOR
+  SUBCOUNTY_OFFICER
+  FIELD_OFFICER
+  COOPERATIVE_MANAGER
+}
+
+model User {
+  id             String    @id @default(uuid())
+  fullName       String
+  jobGroup       String?
+  designation    String?
+  phoneNumber    String?
+  email          String    @unique
+  passwordHash   String
+  role           StaffRole
+  subCounty      String?
+  ward           String?
+  reportsToId    String?
+  reportsTo      User?     @relation("ReportingLine", fields: [reportsToId], references: [id])
+  reports        User[]    @relation("ReportingLine")
+  active         Boolean   @default(true)
+  permissions    Permission[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  fieldVisits      FieldVisit[]      @relation("VisitOfficer")
+  approvedVisits   FieldVisit[]      @relation("VisitApprover")
+  leaveRequests    LeaveRequest[]    @relation("LeaveApplicant")
+  approvedLeaves   LeaveRequest[]    @relation("LeaveApprover")
+  uploadedDocs     Document[]        @relation("DocUploader")
+  reviewedDocs     Document[]        @relation("DocReviewer")
+  approvedDocs     Document[]        @relation("DocApprover")
+  managedCoops     Cooperative[]     @relation("CoopManager")
+  auditLogs        AuditLog[]
+}
+
+// Granular module/tab access rights, assignable by the Director.
+model Permission {
+  id       String @id @default(uuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module   String // e.g. "cooperatives", "documents", "governance", "field_ops", "staff"
+  canView  Boolean @default(true)
+  canEdit  Boolean @default(false)
+  canApprove Boolean @default(false)
+
+  @@unique([userId, module])
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 2: Field Operations & Leave Tracking
+// ---------------------------------------------------------------------------
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model LeaveRequest {
+  id            String      @id @default(uuid())
+  applicantId   String
+  applicant     User        @relation("LeaveApplicant", fields: [applicantId], references: [id])
+  leaveType     String      // annual, sick, compassionate, etc.
+  startDate     DateTime
+  endDate       DateTime
+  reason        String?
+  status        LeaveStatus @default(PENDING)
+  approverId    String?
+  approver      User?       @relation("LeaveApprover", fields: [approverId], references: [id])
+  decisionNote  String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+enum VisitStatus {
+  PLANNED
+  AUTHORIZED
+  REJECTED
+  COMPLETED
+}
+
+model FieldVisit {
+  id             String      @id @default(uuid())
+  officerId      String
+  officer        User        @relation("VisitOfficer", fields: [officerId], references: [id])
+  cooperativeId  String
+  cooperative    Cooperative @relation(fields: [cooperativeId], references: [id])
+  plannedDate    DateTime
+  purpose        String
+  status         VisitStatus @default(PLANNED)
+  approverId     String?
+  approver       User?       @relation("VisitApprover", fields: [approverId], references: [id])
+  report         VisitReport?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model VisitReport {
+  id             String     @id @default(uuid())
+  visitId        String     @unique
+  visit          FieldVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  narrative      String
+  achievements   String?
+  dataPoints     Json?
+  nextActions    String?
+  submittedAt    DateTime   @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 3: Cooperative Registry & Member Database
+// ---------------------------------------------------------------------------
+
+enum ValueChain {
+  COFFEE
+  DAIRY
+  MIRAA
+  IRRIGATION
+  OTHER
+}
+
+model Cooperative {
+  id                 String      @id @default(uuid())
+  name               String
+  registrationNumber String      @unique
+  valueChain         ValueChain
+  subCounty          String
+  ward               String
+  managerId          String?
+  manager            User?       @relation("CoopManager", fields: [managerId], references: [id])
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  members         Member[]
+  documents       Document[]
+  fieldVisits     FieldVisit[]
+  committees      Committee[]
+  agms            AGM[]
+  candidates      ElectionCandidate[]
+
+  @@index([valueChain])
+  @@index([subCounty, ward])
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+model Member {
+  id             String      @id @default(uuid())
+  cooperativeId  String
+  cooperative    Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  legalName      String
+  nationalId     String
+  phoneNumber    String?
+  gender         Gender
+  shareCapital   Decimal     @db.Decimal(14, 2) @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([cooperativeId, nationalId])
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 4: Secure Document Management System (DMS)
+// ---------------------------------------------------------------------------
+
+enum DocumentType {
+  BY_LAWS
+  MEETING_MINUTES
+  CODE_OF_CONDUCT
+  AUDIT_REPORT
+  SPOT_CHECK_REPORT
+  OTHER
+}
+
+enum ApprovalStatus {
+  PENDING
+  REVIEWED
+  APPROVED
+  REJECTED
+}
+
+model Document {
+  id             String         @id @default(uuid())
+  cooperativeId  String
+  cooperative    Cooperative    @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  docType        DocumentType
+  title          String
+  storageKey     String         // key/path in object storage; pre-signed URL generated on demand
+  fileSizeBytes  Int
+  status         ApprovalStatus @default(PENDING)
+  uploadedById   String
+  uploadedBy     User           @relation("DocUploader", fields: [uploadedById], references: [id])
+  reviewedById   String?
+  reviewedBy     User?          @relation("DocReviewer", fields: [reviewedById], references: [id])
+  reviewedAt     DateTime?
+  approvedById   String?
+  approvedBy     User?          @relation("DocApprover", fields: [approvedById], references: [id])
+  approvedAt     DateTime?
+  rejectionNote  String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([cooperativeId, docType])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 5: Governance, Election & AGM Tracking
+// ---------------------------------------------------------------------------
+
+enum CommitteeType {
+  MANAGEMENT
+  SUPERVISORY
+}
+
+enum CommitteeRole {
+  CHAIRPERSON
+  VICE_CHAIRPERSON
+  SECRETARY
+  TREASURER
+  BOARD_MEMBER
+  EXECUTIVE_MANAGER   // non-elected, excluded from 1/3 rule calc
+  SUPERVISORY_CHAIR
+  SUPERVISORY_SECRETARY
+}
+
+enum CommitteeStatus {
+  UPCOMING
+  TERM_EXPIRING
+  TERM_EXPIRED
+  COMPLIANT
+  NON_COMPLIANT
+}
+
+model Committee {
+  id                 String          @id @default(uuid())
+  cooperativeId      String
+  cooperative        Cooperative     @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  committeeType      CommitteeType
+  termLengthYears     Int             @default(3)
+  status             CommitteeStatus @default(UPCOMING)
+  complianceOverride Boolean         @default(false)
+  overrideJustification String?
+  members            CommitteeMember[]
+  signatories        Signatory[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+}
+
+model CommitteeMember {
+  id                  String        @id @default(uuid())
+  committeeId         String
+  committee           Committee     @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  fullName            String
+  gender              Gender
+  role                CommitteeRole
+  electionDate        DateTime
+  reelectionDueDate   DateTime
+  createdAt           DateTime      @default(now())
+}
+
+// Highly restricted, auditable bank account signatories.
+model Signatory {
+  id           String    @id @default(uuid())
+  committeeId  String
+  committee    Committee @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  fullName     String
+  role         String
+  bankAccount  String
+  approvedAt   DateTime  @default(now())
+}
+
+enum CandidateStatus {
+  APPLIED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+model ElectionCandidate {
+  id             String          @id @default(uuid())
+  cooperativeId  String
+  cooperative    Cooperative     @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  fullName       String
+  gender         Gender
+  roleAppliedFor CommitteeRole
+  status         CandidateStatus @default(APPLIED)
+  enteredByStaff Boolean         @default(false) // assisted entry by manager/field staff
+  createdAt      DateTime        @default(now())
+}
+
+enum AGMType {
+  ANNUAL
+  EXTRAORDINARY
+}
+
+model AGM {
+  id             String      @id @default(uuid())
+  cooperativeId  String
+  cooperative    Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  agmType        AGMType
+  meetingDate    DateTime
+  noticeStorageKey  String?  // Letter Calling for the AGM
+  minutesStorageKey String?  // Signed minutes
+  createdAt      DateTime    @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Cross-cutting: Audit log for sensitive actions
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+}
