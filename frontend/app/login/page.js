@@ -65,6 +65,10 @@ export default function LoginPage() {
             {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <a href="/signup" className="mt-4 block text-center text-xs text-gray-500 hover:underline">
+          Test run — create an account
+        </a>
       </div>
     </div>
   );

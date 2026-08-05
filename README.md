@@ -80,6 +80,13 @@ Default seeded login (change immediately in production):
 - **Email:** director@embu.go.ke
 - **Password:** ChangeMe123!
 
+### Pilot / Test Run
+
+For a lean demo with exactly 1 cooperative, 1 employee, and 1 manager, run
+`node prisma/seed-pilot.js` instead of the default seed — see
+[`RENDER_DEPLOYMENT.md`](./RENDER_DEPLOYMENT.md) for a full guide to deploying
+this on Render with open self-signup enabled for testers.
+
 ## Governance Logic (Module 5) — implemented rules
 
 - Default committee term length: 3 years (configurable per value chain)
