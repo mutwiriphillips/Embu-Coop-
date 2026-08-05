@@ -40,10 +40,10 @@ export default function CooperativeDetailPage() {
 
   return (
     <ProtectedRoute>
-      <div className="mb-1 text-xs font-medium uppercase text-embu-gold">{coop.valueChain}</div>
+      <div className="mb-1 text-xs font-medium uppercase text-kenya-gold">{coop.valueChain}</div>
       <h1 className="mb-1 text-2xl font-bold">{coop.name}</h1>
       <p className="mb-6 text-sm text-gray-500">
-        {coop.registrationNumber} · {coop.subCounty} / {coop.ward}
+        {coop.registrationNumber} · {coop.county?.name ? `${coop.county.name} County · ` : ""}{coop.subCounty} / {coop.ward}
       </p>
 
       <div className="mb-6 flex gap-2 border-b border-gray-200">
@@ -52,7 +52,7 @@ export default function CooperativeDetailPage() {
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium ${
-              tab === t ? "border-b-2 border-embu-green text-embu-green" : "text-gray-500"
+              tab === t ? "border-b-2 border-kenya-green text-kenya-green" : "text-gray-500"
             }`}
           >
             {t}
@@ -100,7 +100,7 @@ function MembersTab({ coop, onChange }) {
         </select>
         <input type="number" min="0" step="0.01" placeholder="Share Capital (KES)" className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
           value={form.shareCapital} onChange={(e) => setForm({ ...form, shareCapital: e.target.value })} />
-        <button type="submit" className="rounded-md bg-embu-green px-3 py-2 text-sm font-semibold text-white md:col-span-3">
+        <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white md:col-span-3">
           Add Member
         </button>
       </form>
@@ -178,7 +178,7 @@ function DocumentsTab({ coop, onChange }) {
         </select>
         <input required placeholder="Document title" className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
           value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        <button type="submit" className="rounded-md bg-embu-green px-3 py-2 text-sm font-semibold text-white">
+        <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white">
           Upload
         </button>
       </form>
@@ -205,13 +205,13 @@ function DocumentsTab({ coop, onChange }) {
                 <td className="px-4 py-2 space-x-2">
                   {d.status === "PENDING" && (
                     <>
-                      <button onClick={() => review(d.id, true)} className="text-xs font-medium text-embu-green hover:underline">Review ✓</button>
+                      <button onClick={() => review(d.id, true)} className="text-xs font-medium text-kenya-green hover:underline">Review ✓</button>
                       <button onClick={() => review(d.id, false)} className="text-xs font-medium text-red-600 hover:underline">Reject</button>
                     </>
                   )}
                   {d.status === "REVIEWED" && (
                     <>
-                      <button onClick={() => approve(d.id, true)} className="text-xs font-medium text-embu-green hover:underline">Director Approve</button>
+                      <button onClick={() => approve(d.id, true)} className="text-xs font-medium text-kenya-green hover:underline">Director Approve</button>
                       <button onClick={() => approve(d.id, false)} className="text-xs font-medium text-red-600 hover:underline">Reject</button>
                     </>
                   )}
@@ -308,7 +308,7 @@ function GovernanceTab({ coop, onChange }) {
           <button type="button" onClick={addRow} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium">
             + Add Member
           </button>
-          <button type="submit" className="rounded-md bg-embu-green px-3 py-1.5 text-xs font-semibold text-white">
+          <button type="submit" className="rounded-md bg-kenya-green px-3 py-1.5 text-xs font-semibold text-white">
             Save Committee
           </button>
         </div>
@@ -397,7 +397,7 @@ function AGMTab({ coop, onChange }) {
         </select>
         <input required type="date" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
           value={form.meetingDate} onChange={(e) => setForm({ ...form, meetingDate: e.target.value })} />
-        <button type="submit" className="rounded-md bg-embu-green px-3 py-2 text-sm font-semibold text-white">
+        <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white">
           Record AGM
         </button>
       </form>

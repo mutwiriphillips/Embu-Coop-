@@ -2,8 +2,8 @@ import "./globals.css";
 import { AuthProvider } from "../context/AuthContext";
 
 export const metadata = {
-  title: "Embu County Cooperative Management & Governance System",
-  description: "Co-operative Development Section — Embu County Government",
+  title: "National Cooperative Management & Governance System — Republic of Kenya",
+  description: "State Department for Co-operatives — cooperative registry, governance, and field operations for all 47 counties of Kenya.",
 };
 
 export default function RootLayout({ children }) {

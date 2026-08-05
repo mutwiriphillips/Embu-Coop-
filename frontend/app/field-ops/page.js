@@ -52,7 +52,7 @@ export default function FieldOpsPage() {
           value={form.plannedDate} onChange={(e) => setForm({ ...form, plannedDate: e.target.value })} />
         <input required placeholder="Purpose of visit" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
           value={form.purpose} onChange={(e) => setForm({ ...form, purpose: e.target.value })} />
-        <button type="submit" className="rounded-md bg-embu-green px-3 py-2 text-sm font-semibold text-white md:col-span-4">
+        <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white md:col-span-4">
           Plan Visit
         </button>
       </form>
@@ -82,7 +82,7 @@ export default function FieldOpsPage() {
                   <td className="px-4 py-2 space-x-2">
                     {v.status === "PLANNED" && (
                       <>
-                        <button onClick={() => decide(v.id, true)} className="text-xs font-medium text-embu-green hover:underline">Authorize</button>
+                        <button onClick={() => decide(v.id, true)} className="text-xs font-medium text-kenya-green hover:underline">Authorize</button>
                         <button onClick={() => decide(v.id, false)} className="text-xs font-medium text-red-600 hover:underline">Reject</button>
                       </>
                     )}

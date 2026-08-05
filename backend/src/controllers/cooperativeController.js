@@ -2,10 +2,17 @@ const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
 
+const VALUE_CHAINS = [
+  "COFFEE", "DAIRY", "MIRAA", "IRRIGATION", "TEA", "SUGARCANE", "COTTON",
+  "CASHEWNUT", "FISHERIES", "LIVESTOCK", "POULTRY", "SACCO", "HOUSING",
+  "TRANSPORT", "HANDICRAFTS", "OTHER",
+];
+
 const coopSchema = z.object({
   name: z.string().min(1),
   registrationNumber: z.string().min(1),
-  valueChain: z.enum(["COFFEE", "DAIRY", "MIRAA", "IRRIGATION", "OTHER"]),
+  valueChain: z.enum(VALUE_CHAINS),
+  countyId: z.string().uuid(),
   subCounty: z.string().min(1),
   ward: z.string().min(1),
   managerId: z.string().uuid().optional().nullable(),
@@ -19,12 +26,22 @@ const memberSchema = z.object({
   shareCapital: z.number().nonnegative().default(0),
 });
 
-// GET /cooperatives?valueChain=COFFEE&subCounty=..&ward=..&q=search
+// County-scoped staff (everyone except NATIONAL_ADMIN) only ever see/act on
+// their own county's cooperatives, enforced server-side regardless of what
+// the client sends.
+function scopedCountyId(req) {
+  return req.user.role === "NATIONAL_ADMIN" ? null : req.user.countyId;
+}
+
+// GET /cooperatives?countyId=..&valueChain=COFFEE&subCounty=..&ward=..&q=search
 async function listCooperatives(req, res) {
   const { valueChain, subCounty, ward, q } = req.query;
+  const forcedCountyId = scopedCountyId(req);
+  const countyId = forcedCountyId || req.query.countyId;
 
   const cooperatives = await prisma.cooperative.findMany({
     where: {
+      ...(countyId ? { countyId } : {}),
       ...(valueChain ? { valueChain } : {}),
       ...(subCounty ? { subCounty } : {}),
       ...(ward ? { ward } : {}),
@@ -32,6 +49,7 @@ async function listCooperatives(req, res) {
     },
     include: {
       manager: { select: { id: true, fullName: true } },
+      county: { select: { id: true, name: true } },
       _count: { select: { members: true, documents: true } },
     },
     orderBy: { name: "asc" },
@@ -45,6 +63,7 @@ async function getCooperative(req, res) {
     where: { id: req.params.id },
     include: {
       manager: { select: { id: true, fullName: true } },
+      county: { select: { id: true, name: true } },
       members: true,
       documents: true,
       committees: { include: { members: true, signatories: true } },
@@ -56,7 +75,11 @@ async function getCooperative(req, res) {
 
 async function createCooperative(req, res) {
   const data = coopSchema.parse(req.body);
-  const coop = await prisma.cooperative.create({ data });
+  const forcedCountyId = scopedCountyId(req);
+
+  const coop = await prisma.cooperative.create({
+    data: forcedCountyId ? { ...data, countyId: forcedCountyId } : data,
+  });
 
   await recordAudit({
     userId: req.user.id,
@@ -139,6 +162,7 @@ async function removeMember(req, res) {
 }
 
 module.exports = {
+  VALUE_CHAINS,
   listCooperatives,
   getCooperative,
   createCooperative,

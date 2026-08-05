@@ -13,6 +13,7 @@ const cooperativeRoutes = require("./routes/cooperatives");
 const documentRoutes = require("./routes/documents");
 const governanceRoutes = require("./routes/governance");
 const fieldOpsRoutes = require("./routes/fieldOps");
+const countyRoutes = require("./routes/counties");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -35,6 +36,7 @@ app.get("/api/health", (req, res) => res.json({ status: "ok", service: "embu-coo
 
 app.use("/api/auth", authRoutes);
 app.use("/api/staff", staffRoutes);
+app.use("/api/counties", countyRoutes);
 app.use("/api/cooperatives", cooperativeRoutes);
 // Nested resources under a cooperative
 app.use("/api/cooperatives/:id/documents", documentRoutes);

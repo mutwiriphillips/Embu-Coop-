@@ -51,25 +51,38 @@ deploy:
    actual frontend URL (needed for CORS).
 5. Both services will auto-redeploy after the env var change.
 
-## 4. Seed the pilot accounts
+## 4. Seed the counties, then the pilot accounts
 
 On `embu-coop-backend` → **Shell** tab, run:
 
 ```bash
-node prisma/seed-pilot.js
+npm run seed:counties
+npm run seed:pilot
 ```
 
-This creates (all share the password `Pilot2026!` — change on first login if
-you add a password-change flow, or just rotate the seed password before a
-wider pilot):
+(`seed:pilot` also auto-runs the counties seed if it detects an empty
+`County` table, so running just `npm run seed:pilot` works too — but running
+both explicitly is clearer the first time.)
+
+You should see:
+```
+Seeded 47 counties.
+Pilot seed complete. All accounts share the password: Pilot2026!
+  National Admin: admin@cooperatives.go.ke
+  County Director (Embu): director@embu.go.ke
+  Employee (Field Officer): employee@embu.go.ke
+  Manager: manager@embu.go.ke
+  Cooperative: Kirimiri Coffee Growers Cooperative Society (EMB-PILOT-0001) — Embu County
+```
 
 | Role | Email | Purpose |
 |---|---|---|
-| Director | `director@embu.go.ke` | Admin oversight, staff management, document/committee approvals |
-| Field Officer (employee) | `employee@embu.go.ke` | Plans visits, submits reports, uploads documents |
+| National Admin | `admin@cooperatives.go.ke` | Cross-county oversight, national dashboard, staff/cooperatives in any county |
+| County Director (Embu) | `director@embu.go.ke` | Admin oversight within Embu County only |
+| Field Officer (employee) | `employee@embu.go.ke` | Plans visits, submits reports, uploads documents (Embu) |
 | Cooperative Manager | `manager@embu.go.ke` | Manages the one seeded cooperative's members/documents/committee |
 
-Cooperative seeded: **Kirimiri Coffee Growers Cooperative Society** (`EMB-PILOT-0001`).
+Cooperative seeded: **Kirimiri Coffee Growers Cooperative Society** (`EMB-PILOT-0001`), Embu County.
 
 ### Already deployed and hit `P2021: table does not exist`?
 
@@ -79,15 +92,18 @@ seed as normal:
 
 ```bash
 npx prisma db push --accept-data-loss
-node prisma/seed-pilot.js
+npm run seed:counties
+npm run seed:pilot
 ```
 
 ## 5. Open self-signup for other testers
 
 `ALLOW_OPEN_SIGNUP=true` is already set in `render.yaml` for this pilot. Anyone
 with the frontend URL can go to `/signup` and register as a Field Officer or
-Cooperative Manager with **any email address** — no domain restriction, no
-admin approval. This is intentional for a fast test run.
+Cooperative Manager with **any email address**, picking any of the 47 counties
+— no domain restriction, no admin approval. National Admin and County
+Director accounts can never be created through self-signup, only by an
+existing Director or National Admin. This is intentional for a fast test run.
 
 **Before this goes anywhere near real County data:** set `ALLOW_OPEN_SIGNUP`
 back to `false` in the backend's environment variables. Open signup with no

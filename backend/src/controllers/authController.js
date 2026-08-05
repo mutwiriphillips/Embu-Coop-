@@ -18,6 +18,7 @@ const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   role: z.enum(["FIELD_OFFICER", "COOPERATIVE_MANAGER"]),
+  countyId: z.string().uuid(),
   cooperativeId: z.string().uuid().optional(),
 });
 
@@ -37,7 +38,7 @@ async function login(req, res) {
 
   const user = await prisma.user.findUnique({
     where: { email },
-    include: { permissions: true },
+    include: { permissions: true, county: true },
   });
 
   if (!user || !user.active) {
@@ -79,6 +80,7 @@ async function signup(req, res) {
       email: data.email,
       passwordHash,
       role: data.role,
+      countyId: data.countyId,
       // Test-run signups get baseline view/edit access on the modules they need.
       permissions: {
         create: [
@@ -99,8 +101,9 @@ async function signup(req, res) {
 
   await recordAudit({ userId: user.id, action: "OPEN_SIGNUP", entityType: "User", entityId: user.id });
 
+  const userWithCounty = await prisma.user.findUnique({ where: { id: user.id }, include: { county: true } });
   const token = signToken(user);
-  res.status(201).json({ token, user: toPublicUser(user) });
+  res.status(201).json({ token, user: toPublicUser(userWithCounty) });
 }
 
 module.exports = { login, me, signup, toPublicUser };

@@ -11,11 +11,27 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
+// County reference data (all 47 Kenyan counties — see prisma/seed-counties.js)
+// ---------------------------------------------------------------------------
+
+model County {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String   @unique // official county code, e.g. "014" for Embu
+  region    String   // former province grouping, for dashboard sub-filters
+  createdAt DateTime @default(now())
+
+  staff        User[]
+  cooperatives Cooperative[]
+}
+
+// ---------------------------------------------------------------------------
 // MODULE 1: County Staff & Access Management (RBAC)
 // ---------------------------------------------------------------------------
 
 enum StaffRole {
-  DIRECTOR
+  NATIONAL_ADMIN       // cross-county oversight (State Dept. of Cooperatives)
+  DIRECTOR             // County Director of Co-operative Development
   SUBCOUNTY_OFFICER
   FIELD_OFFICER
   COOPERATIVE_MANAGER
@@ -30,6 +46,8 @@ model User {
   email          String    @unique
   passwordHash   String
   role           StaffRole
+  countyId       String?
+  county         County?   @relation(fields: [countyId], references: [id])
   subCounty      String?
   ward           String?
   reportsToId    String?
@@ -49,6 +67,8 @@ model User {
   approvedDocs     Document[]        @relation("DocApprover")
   managedCoops     Cooperative[]     @relation("CoopManager")
   auditLogs        AuditLog[]
+
+  @@index([countyId])
 }
 
 // Granular module/tab access rights, assignable by the Director.
@@ -133,6 +153,17 @@ enum ValueChain {
   DAIRY
   MIRAA
   IRRIGATION
+  TEA
+  SUGARCANE
+  COTTON
+  CASHEWNUT
+  FISHERIES
+  LIVESTOCK
+  POULTRY
+  SACCO          // savings & credit co-operative societies
+  HOUSING
+  TRANSPORT      // matatu/boda-boda transport SACCOs
+  HANDICRAFTS
   OTHER
 }
 
@@ -141,6 +172,8 @@ model Cooperative {
   name               String
   registrationNumber String      @unique
   valueChain         ValueChain
+  countyId           String
+  county             County      @relation(fields: [countyId], references: [id])
   subCounty          String
   ward               String
   managerId          String?
@@ -156,7 +189,7 @@ model Cooperative {
   candidates      ElectionCandidate[]
 
   @@index([valueChain])
-  @@index([subCounty, ward])
+  @@index([countyId, subCounty, ward])
 }
 
 enum Gender {

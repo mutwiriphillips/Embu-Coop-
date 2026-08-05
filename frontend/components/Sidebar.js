@@ -9,7 +9,7 @@ const LINKS = [
   { href: "/cooperatives", label: "Cooperatives" },
   { href: "/field-ops", label: "Field Visits" },
   { href: "/leave", label: "Leave" },
-  { href: "/staff", label: "Staff & Access", roles: ["DIRECTOR", "SUBCOUNTY_OFFICER"] },
+  { href: "/staff", label: "Staff & Access", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
 ];
 
 export default function Sidebar() {
@@ -19,9 +19,12 @@ export default function Sidebar() {
   return (
     <aside className="flex h-screen w-60 flex-col justify-between border-r border-gray-200 bg-white">
       <div>
-        <div className="border-b border-gray-200 px-4 py-5">
-          <p className="text-sm font-bold text-embu-green">Embu County</p>
-          <p className="text-xs text-gray-500">Cooperative Management</p>
+        <div className="h-1 w-full bg-kenya-stripe" />
+        <div className="border-b border-gray-200 px-4 py-4">
+          <p className="text-sm font-bold text-kenya-black">Republic of Kenya</p>
+          <p className="text-xs text-gray-500">
+            {user?.role === "NATIONAL_ADMIN" ? "National Co-operatives Portal" : (user?.county?.name ? `${user.county.name} County` : "Cooperative Management")}
+          </p>
         </div>
         <nav className="p-2">
           {LINKS.filter((l) => !l.roles || l.roles.includes(user?.role)).map((l) => (
@@ -30,7 +33,7 @@ export default function Sidebar() {
               href={l.href}
               className={`block rounded-md px-3 py-2 text-sm ${
                 pathname?.startsWith(l.href)
-                  ? "bg-embu-green/10 font-semibold text-embu-green"
+                  ? "bg-kenya-green/10 font-semibold text-kenya-green"
                   : "text-gray-600 hover:bg-gray-100"
               }`}
             >
@@ -41,8 +44,8 @@ export default function Sidebar() {
       </div>
       <div className="border-t border-gray-200 p-4">
         <p className="text-sm font-medium">{user?.fullName}</p>
-        <p className="mb-2 text-xs text-gray-500">{user?.role?.replace("_", " ")}</p>
-        <button onClick={logout} className="text-xs font-medium text-red-600 hover:underline">
+        <p className="mb-2 text-xs text-gray-500">{user?.role?.replace(/_/g, " ")}</p>
+        <button onClick={logout} className="text-xs font-medium text-kenya-red hover:underline">
           Sign out
         </button>
       </div>

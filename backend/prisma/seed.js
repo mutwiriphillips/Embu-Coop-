@@ -6,6 +6,11 @@ const prisma = new PrismaClient();
 async function main() {
   const passwordHash = await bcrypt.hash("ChangeMe123!", 10);
 
+  const embu = await prisma.county.findUnique({ where: { code: "014" } });
+  if (!embu) {
+    throw new Error("Counties not seeded yet — run `node prisma/seed-counties.js` first.");
+  }
+
   const director = await prisma.user.upsert({
     where: { email: "director@embu.go.ke" },
     update: {},
@@ -14,6 +19,7 @@ async function main() {
       email: "director@embu.go.ke",
       passwordHash,
       role: "DIRECTOR",
+      countyId: embu.id,
       designation: "Director, Co-operative Development",
       subCounty: "Manyatta",
       ward: "Kithimu",
@@ -28,6 +34,7 @@ async function main() {
       email: "officer@embu.go.ke",
       passwordHash,
       role: "SUBCOUNTY_OFFICER",
+      countyId: embu.id,
       designation: "Cooperative Development Officer",
       subCounty: "Runyenjes",
       ward: "Kagaari South",
@@ -49,6 +56,7 @@ async function main() {
       name: "Kirimiri Coffee Growers Cooperative Society",
       registrationNumber: "EMB-COFFEE-0001",
       valueChain: "COFFEE",
+      countyId: embu.id,
       subCounty: "Runyenjes",
       ward: "Kagaari South",
     },

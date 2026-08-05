@@ -54,7 +54,7 @@ export default function LeavePage() {
           value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
         <input placeholder="Reason (optional)" className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
           value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
-        <button type="submit" className="rounded-md bg-embu-green px-3 py-2 text-sm font-semibold text-white md:col-span-5">
+        <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white md:col-span-5">
           Apply for Leave
         </button>
       </form>
@@ -84,7 +84,7 @@ export default function LeavePage() {
                   <td className="px-4 py-2 space-x-2">
                     {l.status === "PENDING" && (
                       <>
-                        <button onClick={() => decide(l.id, true)} className="text-xs font-medium text-embu-green hover:underline">Approve</button>
+                        <button onClick={() => decide(l.id, true)} className="text-xs font-medium text-kenya-green hover:underline">Approve</button>
                         <button onClick={() => decide(l.id, false)} className="text-xs font-medium text-red-600 hover:underline">Reject</button>
                       </>
                     )}

@@ -8,7 +8,8 @@ const createStaffSchema = z.object({
   fullName: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
-  role: z.enum(["DIRECTOR", "SUBCOUNTY_OFFICER", "FIELD_OFFICER", "COOPERATIVE_MANAGER"]),
+  role: z.enum(["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER", "FIELD_OFFICER", "COOPERATIVE_MANAGER"]),
+  countyId: z.string().uuid().optional(),
   jobGroup: z.string().optional(),
   designation: z.string().optional(),
   phoneNumber: z.string().optional(),
@@ -27,8 +28,14 @@ const permissionSchema = z.object({
 });
 
 async function listStaff(req, res) {
+  const countyId = req.user.role === "NATIONAL_ADMIN" ? req.query.countyId : req.user.countyId;
   const staff = await prisma.user.findMany({
-    include: { permissions: true, reportsTo: { select: { id: true, fullName: true } } },
+    where: countyId ? { countyId } : {},
+    include: {
+      permissions: true,
+      county: { select: { id: true, name: true } },
+      reportsTo: { select: { id: true, fullName: true } },
+    },
     orderBy: { fullName: "asc" },
   });
   res.json(staff.map(toPublicUser));
@@ -46,12 +53,18 @@ async function createStaff(req, res) {
   const data = createStaffSchema.parse(req.body);
   const passwordHash = await bcrypt.hash(data.password, 10);
 
+  // A County Director can only create staff within their own county; only a
+  // NATIONAL_ADMIN may create staff for an arbitrary county (or another
+  // NATIONAL_ADMIN / DIRECTOR account).
+  const countyId = req.user.role === "NATIONAL_ADMIN" ? data.countyId : req.user.countyId;
+
   const user = await prisma.user.create({
     data: {
       fullName: data.fullName,
       email: data.email,
       passwordHash,
       role: data.role,
+      countyId,
       jobGroup: data.jobGroup,
       designation: data.designation,
       phoneNumber: data.phoneNumber,

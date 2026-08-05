@@ -17,7 +17,7 @@ async function authenticate(req, res, next) {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      include: { permissions: true },
+      include: { permissions: true, county: true },
     });
 
     if (!user || !user.active) {
@@ -51,7 +51,7 @@ function requireRole(...roles) {
 function requirePermission(module, level = "canView") {
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: "Not authenticated" });
-    if (req.user.role === "DIRECTOR") return next();
+    if (req.user.role === "NATIONAL_ADMIN" || req.user.role === "DIRECTOR") return next();
 
     const perm = req.user.permissions.find((p) => p.module === module);
     if (!perm || !perm[level]) {

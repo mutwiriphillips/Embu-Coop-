@@ -9,23 +9,37 @@ import api from "../../lib/api";
 export default function SignupPage() {
   const router = useRouter();
   const [cooperatives, setCooperatives] = useState([]);
+  const [counties, setCounties] = useState([]);
   const [disabled, setDisabled] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     password: "",
     role: "FIELD_OFFICER",
+    countyId: "",
     cooperativeId: "",
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    api.get("/counties").then((res) => setCounties(res.data)).catch(() => {});
     api
       .get("/auth/signup/cooperatives")
-      .then((res) => setCooperatives(res.data))
+      .then(() => {})
       .catch(() => setDisabled(true));
   }, []);
+
+  useEffect(() => {
+    if (!form.countyId || form.role !== "COOPERATIVE_MANAGER") {
+      setCooperatives([]);
+      return;
+    }
+    api
+      .get("/auth/signup/cooperatives", { params: { countyId: form.countyId } })
+      .then((res) => setCooperatives(res.data))
+      .catch(() => {});
+  }, [form.countyId, form.role]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -49,7 +63,7 @@ export default function SignupPage() {
         <div>
           <p className="mb-2 font-semibold">Self-signup is not enabled on this environment.</p>
           <p className="text-sm text-gray-500">Ask your Director for an account, or sign in below.</p>
-          <a href="/login" className="mt-4 inline-block text-sm font-medium text-embu-green hover:underline">
+          <a href="/login" className="mt-4 inline-block text-sm font-medium text-kenya-green hover:underline">
             Go to login
           </a>
         </div>
@@ -58,9 +72,9 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-embu-green/5 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-kenya-green/5 px-4">
       <div className="w-full max-w-sm rounded-xl bg-white p-8 shadow-lg">
-        <h1 className="mb-1 text-xl font-bold text-embu-green">Test-Run Signup</h1>
+        <h1 className="mb-1 text-xl font-bold text-kenya-green">Test-Run Signup</h1>
         <p className="mb-6 text-sm text-gray-500">
           Pilot access — any email accepted. Not for production use.
         </p>
@@ -79,6 +93,12 @@ export default function SignupPage() {
             <option value="COOPERATIVE_MANAGER">Cooperative Manager</option>
           </select>
 
+          <select required className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            value={form.countyId} onChange={(e) => setForm({ ...form, countyId: e.target.value, cooperativeId: "" })}>
+            <option value="">Select your county…</option>
+            {counties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+
           {form.role === "COOPERATIVE_MANAGER" && (
             <select required className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
               value={form.cooperativeId} onChange={(e) => setForm({ ...form, cooperativeId: e.target.value })}>
@@ -90,7 +110,7 @@ export default function SignupPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button type="submit" disabled={submitting}
-            className="w-full rounded-md bg-embu-green px-4 py-2 text-sm font-semibold text-white hover:bg-embu-green/90 disabled:opacity-50">
+            className="w-full rounded-md bg-kenya-green px-4 py-2 text-sm font-semibold text-white hover:bg-kenya-green/90 disabled:opacity-50">
             {submitting ? "Creating account…" : "Create test account"}
           </button>
         </form>

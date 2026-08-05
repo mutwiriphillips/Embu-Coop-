@@ -1,36 +1,64 @@
 /**
  * Pilot / test-run seed — exactly what's needed to demo the system with:
- *   - 1 Director account (admin oversight)
- *   - 1 County employee (Field Officer)
- *   - 1 Cooperative Manager
- *   - 1 Cooperative, with the manager attached
+ *   - 1 National Admin account (cross-county oversight)
+ *   - 1 County Director (Embu — the original pilot county)
+ *   - 1 County employee (Field Officer, Embu)
+ *   - 1 Cooperative Manager (Embu)
+ *   - 1 Cooperative, in Embu County, with the manager attached
+ *
+ * Requires the 47 counties to already exist — run seed-counties.js first
+ * (this script also runs it for you via ensureCounties()).
  *
  * Run with: node prisma/seed-pilot.js
- * (Use this INSTEAD of prisma/seed.js for a lean pilot; seed.js seeds a
- *  Sub-County Officer instead of a Manager and no linked Manager account.)
  */
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
+const { execSync } = require("child_process");
 
 const prisma = new PrismaClient();
 const PILOT_PASSWORD = "Pilot2026!";
 
+async function ensureCounties() {
+  const count = await prisma.county.count();
+  if (count === 0) {
+    console.log("No counties found — seeding all 47 first...");
+    execSync("node prisma/seed-counties.js", { stdio: "inherit" });
+  }
+}
+
 async function main() {
+  await ensureCounties();
+
+  const embu = await prisma.county.findUniqueOrThrow({ where: { code: "014" } });
   const passwordHash = await bcrypt.hash(PILOT_PASSWORD, 10);
+
+  const nationalAdmin = await prisma.user.upsert({
+    where: { email: "admin@cooperatives.go.ke" },
+    update: {},
+    create: {
+      fullName: "National Cooperatives Admin",
+      email: "admin@cooperatives.go.ke",
+      passwordHash,
+      role: "NATIONAL_ADMIN",
+      designation: "State Department for Co-operatives",
+    },
+  });
 
   const director = await prisma.user.upsert({
     where: { email: "director@embu.go.ke" },
     update: {},
     create: {
-      fullName: "County Director",
+      fullName: "Embu County Director",
       email: "director@embu.go.ke",
       passwordHash,
       role: "DIRECTOR",
+      countyId: embu.id,
       designation: "Director, Co-operative Development",
+      reportsToId: nationalAdmin.id,
     },
   });
 
-  const employee = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "employee@embu.go.ke" },
     update: {},
     create: {
@@ -38,6 +66,7 @@ async function main() {
       email: "employee@embu.go.ke",
       passwordHash,
       role: "FIELD_OFFICER",
+      countyId: embu.id,
       designation: "Field Officer",
       subCounty: "Runyenjes",
       ward: "Kagaari South",
@@ -59,6 +88,7 @@ async function main() {
       name: "Kirimiri Coffee Growers Cooperative Society",
       registrationNumber: "EMB-PILOT-0001",
       valueChain: "COFFEE",
+      countyId: embu.id,
       subCounty: "Runyenjes",
       ward: "Kagaari South",
     },
@@ -72,6 +102,7 @@ async function main() {
       email: "manager@embu.go.ke",
       passwordHash,
       role: "COOPERATIVE_MANAGER",
+      countyId: embu.id,
       designation: "Cooperative Manager",
       subCounty: "Runyenjes",
       ward: "Kagaari South",
@@ -91,10 +122,11 @@ async function main() {
   });
 
   console.log("Pilot seed complete. All accounts share the password:", PILOT_PASSWORD);
-  console.log(`  Director: director@embu.go.ke`);
+  console.log(`  National Admin: admin@cooperatives.go.ke`);
+  console.log(`  County Director (Embu): director@embu.go.ke`);
   console.log(`  Employee (Field Officer): employee@embu.go.ke`);
   console.log(`  Manager: manager@embu.go.ke`);
-  console.log(`  Cooperative: ${cooperative.name} (${cooperative.registrationNumber})`);
+  console.log(`  Cooperative: ${cooperative.name} (${cooperative.registrationNumber}) — Embu County`);
 }
 
 main()
