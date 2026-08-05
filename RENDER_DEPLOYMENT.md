@@ -24,8 +24,18 @@ git push -u origin main
    - `embu-coop-db` — free PostgreSQL instance
    - `embu-coop-backend` — Node/Express API
    - `embu-coop-frontend` — Next.js app
-4. Click **Apply**. First deploy takes ~5–10 minutes (installs deps, runs
-   `prisma migrate deploy` to create tables).
+4. Click **Apply**. First deploy takes ~5–10 minutes (installs deps, then
+   `npx prisma db push` creates the tables directly from `schema.prisma`).
+
+> **Why `db push` and not `migrate deploy`?** This repo doesn't have a
+> `prisma/migrations/` folder — generating one requires running
+> `prisma migrate dev` against a real database once, which wasn't possible
+> in the environment this scaffold was built in. `db push` syncs the schema
+> straight to the database with no migration history, which is the right
+> tool for a pilot. Before treating this as a long-lived production system,
+> run `npx prisma migrate dev --name init` against a real dev database once
+> to generate proper migration files, commit them, and switch the build
+> command back to `migrate deploy` for safer, reviewable schema changes.
 
 ## 3. Fix the cross-service URLs
 
@@ -60,6 +70,17 @@ wider pilot):
 | Cooperative Manager | `manager@embu.go.ke` | Manages the one seeded cooperative's members/documents/committee |
 
 Cooperative seeded: **Kirimiri Coffee Growers Cooperative Society** (`EMB-PILOT-0001`).
+
+### Already deployed and hit `P2021: table does not exist`?
+
+That means the build ran before this fix (with `migrate deploy` and no
+migration files). Run this once in the Shell tab to create the tables, then
+seed as normal:
+
+```bash
+npx prisma db push --accept-data-loss
+node prisma/seed-pilot.js
+```
 
 ## 5. Open self-signup for other testers
 
