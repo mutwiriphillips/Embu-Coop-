@@ -34,6 +34,10 @@ always filtered to their own county's data regardless of what the client sends.
 3. **Cooperative Registry & Member Database** — cooperative profiles (16 value chains), member roll, share capital
 4. **Secure Document Management System (DMS)** — encrypted PDF repository, 3-tier approval workflow
 5. **Governance, Election & AGM Tracking** — committee terms, 1/3 gender rotation rule, AGM archive
+6. **Financial Ledger & Credit Readiness** — contribution ledger, produce delivery tracking
+   (coffee, milk, tea, etc.), payout/disbursement ledger, and a transparent credit-scoring
+   engine cooperatives can use to demonstrate creditworthiness to third-party lenders.
+   **This platform never disburses loans — it is a trust layer, not a lender.**
 
 ## Project Structure
 
@@ -112,6 +116,61 @@ deploying this on Render with open self-signup enabled for testers.
   committee seats (Chairperson, Vice Chairperson, Secretary, Treasurer, 4 board
   members). Non-elected Executive Manager is excluded. Violations block submission
   unless the Director overrides with a logged justification.
+
+## Credit Readiness Scoring (Module 6)
+
+`backend/src/utils/creditScore.js` computes a 0–100 composite score across six
+weighted factors — contribution consistency (20%), **produce consistency
+(20%)**, governance compliance (20%, reuses the Module 5 rules above),
+document compliance (15%), membership stability (15%), and share capital
+trajectory (10%) — mapped to a band (AA/A/B/C/D). The full per-factor
+breakdown is returned so nothing is a black box to a reviewing lender.
+
+Produce consistency is scored independently from contribution consistency —
+a cooperative can't hide declining farmer output behind healthy cash
+collection, or vice versa. Both matter to a lender for different reasons.
+
+Run the test suite directly (plain `assert`, no framework needed):
+```bash
+cd backend && npm run test:credit-score
+```
+36 unit tests cover each factor in isolation plus end-to-end scenarios (a
+strong cooperative scoring AA/A, a weak one scoring D, and a check that
+produce activity measurably moves the score independent of contributions).
+
+**Scope boundary, enforced in code, not just policy:** only county staff
+(National Admin / Director / Sub-County Officer) can trigger an assessment —
+a Cooperative Manager can never self-certify their own cooperative's score.
+Every response carries an explicit disclaimer that this is a referral signal
+for a third-party lender, not a loan offer, pre-approval, or guarantee — this
+platform does not disburse funds.
+
+## Produce, Payouts & the Disbursement Trickle-Down Report
+
+Two new ledgers, alongside the Module 6 Contribution ledger:
+
+- **`ProduceDelivery`** — what a member physically delivers (coffee cherries,
+  milk, tea leaf, etc.), with quantity, unit, quality grade, and an optional
+  rate/total value. Feeds directly into the produce-consistency credit factor.
+- **`Payout`** — money the cooperative pays OUT to a member, optionally
+  settling specific unpaid produce deliveries. This is the other half of the
+  ledger: Contribution/ProduceDelivery track what flows IN, Payout tracks
+  what flows back OUT to the farmer.
+
+The Director's **Farmer Disbursements** dashboard (`/disbursements` in the
+frontend, `GET /api/reports/disbursements` in the API) is a trickle-down
+report: National (all counties, National Admin only) → County → Cooperative
+→ individual farmer compensation amounts, filterable by date range.
+
+**Ownership scoping, enforced in code:** a new `requireCooperativeAccess`
+middleware (`backend/src/middleware/auth.js`) ensures a Cooperative Manager
+can only ever touch their *own* cooperative's financial data — not any
+cooperative they happen to guess an ID for — and county staff are always
+scoped to their own county. This is applied to contributions, produce,
+payouts, and credit-assessment routes. **The same check has not yet been
+retrofitted onto the older Documents and Governance routes**, which still
+rely on role/permission checks alone — worth closing in a follow-up pass.
+
 
 ## Open Items From Scope (to confirm with County before Phase 2)
 

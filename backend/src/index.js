@@ -14,6 +14,11 @@ const documentRoutes = require("./routes/documents");
 const governanceRoutes = require("./routes/governance");
 const fieldOpsRoutes = require("./routes/fieldOps");
 const countyRoutes = require("./routes/counties");
+const contributionRoutes = require("./routes/contributions");
+const creditAssessmentRoutes = require("./routes/creditAssessment");
+const produceRoutes = require("./routes/produce");
+const payoutRoutes = require("./routes/payouts");
+const reportsRoutes = require("./routes/reports");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -41,7 +46,12 @@ app.use("/api/cooperatives", cooperativeRoutes);
 // Nested resources under a cooperative
 app.use("/api/cooperatives/:id/documents", documentRoutes);
 app.use("/api/cooperatives/:id/governance", governanceRoutes);
+app.use("/api/cooperatives/:id/contributions", contributionRoutes);
+app.use("/api/cooperatives/:id/credit-assessment", creditAssessmentRoutes);
+app.use("/api/cooperatives/:id/produce", produceRoutes);
+app.use("/api/cooperatives/:id/payouts", payoutRoutes);
 app.use("/api/field-ops", fieldOpsRoutes);
+app.use("/api/reports", reportsRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 app.use(errorHandler);

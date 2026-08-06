@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import ProtectedRoute from "../../../components/ProtectedRoute";
 import api from "../../../lib/api";
 
-const TABS = ["Members", "Documents", "Governance", "AGM"];
+const TABS = ["Members", "Contributions", "Produce", "Payouts", "Documents", "Governance", "AGM", "Credit Score"];
 
 export default function CooperativeDetailPage() {
   const { id } = useParams();
@@ -61,9 +61,13 @@ export default function CooperativeDetailPage() {
       </div>
 
       {tab === "Members" && <MembersTab coop={coop} onChange={reload} />}
+      {tab === "Contributions" && <ContributionsTab coop={coop} />}
+      {tab === "Produce" && <ProduceTab coop={coop} />}
+      {tab === "Payouts" && <PayoutsTab coop={coop} />}
       {tab === "Documents" && <DocumentsTab coop={coop} onChange={reload} />}
       {tab === "Governance" && <GovernanceTab coop={coop} onChange={reload} />}
       {tab === "AGM" && <AGMTab coop={coop} onChange={reload} />}
+      {tab === "Credit Score" && <CreditScoreTab coop={coop} />}
     </ProtectedRoute>
   );
 }
@@ -411,6 +415,539 @@ function AGMTab({ coop, onChange }) {
         ))}
         {(coop.agms || []).length === 0 && <p className="text-gray-400">No AGMs recorded yet.</p>}
       </div>
+    </div>
+  );
+}
+
+const CONTRIBUTION_TYPES = ["MONTHLY_CONTRIBUTION", "SHARE_CAPITAL_TOPUP", "LOAN_REPAYMENT", "OTHER"];
+const CONTRIBUTION_METHODS = ["MPESA", "CASH", "BANK_TRANSFER", "OTHER"];
+
+function ContributionsTab({ coop }) {
+  const [contributions, setContributions] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [form, setForm] = useState({
+    memberId: "",
+    amount: "",
+    type: "MONTHLY_CONTRIBUTION",
+    method: "CASH",
+    contributionDate: new Date().toISOString().slice(0, 10),
+  });
+  const [error, setError] = useState("");
+
+  function load() {
+    api.get(`/cooperatives/${coop.id}/contributions`).then((res) => setContributions(res.data)).catch(() => {});
+    api.get(`/cooperatives/${coop.id}/contributions/summary`).then((res) => setSummary(res.data)).catch(() => {});
+  }
+
+  useEffect(load, [coop.id]);
+
+  async function recordContribution(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await api.post(`/cooperatives/${coop.id}/contributions`, { ...form, amount: Number(form.amount) });
+      setForm({ ...form, memberId: "", amount: "" });
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to record contribution");
+    }
+  }
+
+  return (
+    <div>
+      <p className="mb-4 rounded-md bg-kenya-green/5 px-4 py-2 text-xs text-gray-600">
+        This records staff-assisted contributions (cash or bank transfer confirmed in person).
+        M-Pesa self-service contributions from the member&apos;s own dashboard are on the roadmap —
+        this ledger is the same one that integration will write to, via the <code>method</code> and{" "}
+        <code>externalRef</code> fields already in place.
+      </p>
+
+      {summary && (
+        <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-3">
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <p className="text-xs uppercase text-gray-500">Total Entries</p>
+            <p className="mt-1 text-xl font-bold text-kenya-green">{summary.totalContributions}</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <p className="text-xs uppercase text-gray-500">This Month</p>
+            <p className="mt-1 text-xl font-bold text-kenya-green">KES {summary.thisMonthTotal.toLocaleString()}</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <p className="text-xs uppercase text-gray-500">Share Capital Total</p>
+            <p className="mt-1 text-xl font-bold text-kenya-green">
+              KES {(summary.totalsByType.SHARE_CAPITAL_TOPUP || 0).toLocaleString()}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={recordContribution} className="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-6">
+        <select required className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
+          value={form.memberId} onChange={(e) => setForm({ ...form, memberId: e.target.value })}>
+          <option value="">Select member…</option>
+          {(coop.members || []).map((m) => <option key={m.id} value={m.id}>{m.legalName}</option>)}
+        </select>
+        <input required type="number" min="1" step="0.01" placeholder="Amount (KES)"
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+        <select className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+          {CONTRIBUTION_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
+        </select>
+        <select className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>
+          {CONTRIBUTION_METHODS.map((m) => <option key={m} value={m}>{m.replace(/_/g, " ")}</option>)}
+        </select>
+        <input required type="date" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.contributionDate} onChange={(e) => setForm({ ...form, contributionDate: e.target.value })} />
+        <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white md:col-span-6">
+          Record Contribution
+        </button>
+      </form>
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+            <tr>
+              <th className="px-4 py-2">Member</th>
+              <th className="px-4 py-2">Amount</th>
+              <th className="px-4 py-2">Type</th>
+              <th className="px-4 py-2">Method</th>
+              <th className="px-4 py-2">Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {contributions.map((c) => (
+              <tr key={c.id} className="border-t border-gray-100">
+                <td className="px-4 py-2 font-medium">{c.member?.legalName}</td>
+                <td className="px-4 py-2">KES {Number(c.amount).toLocaleString()}</td>
+                <td className="px-4 py-2">{c.type.replace(/_/g, " ")}</td>
+                <td className="px-4 py-2">{c.method.replace(/_/g, " ")}</td>
+                <td className="px-4 py-2">{new Date(c.contributionDate).toLocaleDateString()}</td>
+              </tr>
+            ))}
+            {contributions.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">No contributions recorded yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const PRODUCE_UNITS = ["KG", "LITERS", "BAGS", "CRATES", "OTHER"];
+const PRODUCE_TYPE_SUGGESTIONS = {
+  COFFEE: "Coffee Cherries",
+  DAIRY: "Whole Milk",
+  TEA: "Tea Leaf (Green Leaf)",
+  SUGARCANE: "Sugarcane",
+  COTTON: "Raw Cotton",
+  CASHEWNUT: "Raw Cashewnuts",
+  FISHERIES: "Fresh Fish",
+  LIVESTOCK: "Livestock",
+  POULTRY: "Eggs",
+  MIRAA: "Miraa",
+};
+
+function ProduceTab({ coop }) {
+  const suggestedType = PRODUCE_TYPE_SUGGESTIONS[coop.valueChain] || "Produce";
+  const [deliveries, setDeliveries] = useState([]);
+  const [unpaidSummary, setUnpaidSummary] = useState([]);
+  const [form, setForm] = useState({
+    memberId: "",
+    produceType: suggestedType,
+    quantity: "",
+    unit: "KG",
+    qualityGrade: "",
+    ratePerUnit: "",
+    deliveryDate: new Date().toISOString().slice(0, 10),
+  });
+  const [error, setError] = useState("");
+
+  function load() {
+    api.get(`/cooperatives/${coop.id}/produce`).then((res) => setDeliveries(res.data)).catch(() => {});
+    api.get(`/cooperatives/${coop.id}/produce/unpaid-summary`).then((res) => setUnpaidSummary(res.data)).catch(() => {});
+  }
+
+  useEffect(load, [coop.id]);
+
+  async function recordDelivery(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await api.post(`/cooperatives/${coop.id}/produce`, {
+        ...form,
+        quantity: Number(form.quantity),
+        ratePerUnit: form.ratePerUnit ? Number(form.ratePerUnit) : undefined,
+        qualityGrade: form.qualityGrade || undefined,
+      });
+      setForm({ ...form, memberId: "", quantity: "", qualityGrade: "" });
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to record delivery");
+    }
+  }
+
+  return (
+    <div>
+      {unpaidSummary.length > 0 && (
+        <div className="mb-4 rounded-lg border border-kenya-gold/40 bg-kenya-gold/5 p-4">
+          <p className="mb-2 text-sm font-semibold text-kenya-black">Outstanding balances owed to farmers</p>
+          <div className="flex flex-wrap gap-3">
+            {unpaidSummary.map((m) => (
+              <div key={m.memberId} className="rounded-md bg-white px-3 py-2 text-xs shadow-sm">
+                <span className="font-medium">{m.memberName}</span>: KES {m.totalOwed.toLocaleString()} ({m.deliveryCount} deliveries)
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-gray-500">Settle these from the Payouts tab.</p>
+        </div>
+      )}
+
+      <form onSubmit={recordDelivery} className="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-7">
+        <select required className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
+          value={form.memberId} onChange={(e) => setForm({ ...form, memberId: e.target.value })}>
+          <option value="">Select member…</option>
+          {(coop.members || []).map((m) => <option key={m.id} value={m.id}>{m.legalName}</option>)}
+        </select>
+        <input required placeholder="Produce type" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.produceType} onChange={(e) => setForm({ ...form, produceType: e.target.value })} />
+        <input required type="number" min="0.01" step="0.01" placeholder="Quantity" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
+        <select className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>
+          {PRODUCE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+        </select>
+        <input placeholder="Grade (optional)" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.qualityGrade} onChange={(e) => setForm({ ...form, qualityGrade: e.target.value })} />
+        <input type="number" min="0" step="0.01" placeholder="Rate/unit KES (optional)" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.ratePerUnit} onChange={(e) => setForm({ ...form, ratePerUnit: e.target.value })} />
+        <input required type="date" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.deliveryDate} onChange={(e) => setForm({ ...form, deliveryDate: e.target.value })} />
+        <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white md:col-span-7">
+          Record Delivery
+        </button>
+      </form>
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+            <tr>
+              <th className="px-4 py-2">Member</th>
+              <th className="px-4 py-2">Produce</th>
+              <th className="px-4 py-2">Quantity</th>
+              <th className="px-4 py-2">Grade</th>
+              <th className="px-4 py-2">Value</th>
+              <th className="px-4 py-2">Date</th>
+              <th className="px-4 py-2">Paid</th>
+            </tr>
+          </thead>
+          <tbody>
+            {deliveries.map((d) => (
+              <tr key={d.id} className="border-t border-gray-100">
+                <td className="px-4 py-2 font-medium">{d.member?.legalName}</td>
+                <td className="px-4 py-2">{d.produceType}</td>
+                <td className="px-4 py-2">{Number(d.quantity).toLocaleString()} {d.unit}</td>
+                <td className="px-4 py-2">{d.qualityGrade || "—"}</td>
+                <td className="px-4 py-2">{d.totalValue ? `KES ${Number(d.totalValue).toLocaleString()}` : "—"}</td>
+                <td className="px-4 py-2">{new Date(d.deliveryDate).toLocaleDateString()}</td>
+                <td className="px-4 py-2">{d.paid ? "✓ Paid" : "Pending"}</td>
+              </tr>
+            ))}
+            {deliveries.length === 0 && (
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400">No produce deliveries recorded yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const PAYOUT_TYPES = ["PRODUCE_PAYMENT", "DIVIDEND", "BONUS", "OTHER"];
+const PAYOUT_METHODS = ["MPESA", "CASH", "BANK_TRANSFER", "OTHER"];
+
+function PayoutsTab({ coop }) {
+  const [payouts, setPayouts] = useState([]);
+  const [unpaidSummary, setUnpaidSummary] = useState([]);
+  const [unpaidDeliveries, setUnpaidDeliveries] = useState([]);
+  const [form, setForm] = useState({
+    memberId: "",
+    amount: "",
+    type: "PRODUCE_PAYMENT",
+    method: "CASH",
+    periodLabel: "",
+    payoutDate: new Date().toISOString().slice(0, 10),
+  });
+  const [selectedDeliveryIds, setSelectedDeliveryIds] = useState([]);
+  const [error, setError] = useState("");
+
+  function load() {
+    api.get(`/cooperatives/${coop.id}/payouts`).then((res) => setPayouts(res.data)).catch(() => {});
+    api.get(`/cooperatives/${coop.id}/produce/unpaid-summary`).then((res) => setUnpaidSummary(res.data)).catch(() => {});
+  }
+
+  useEffect(load, [coop.id]);
+
+  useEffect(() => {
+    if (!form.memberId) {
+      setUnpaidDeliveries([]);
+      setSelectedDeliveryIds([]);
+      return;
+    }
+    api
+      .get(`/cooperatives/${coop.id}/produce`, { params: { memberId: form.memberId, paid: "false" } })
+      .then((res) => setUnpaidDeliveries(res.data))
+      .catch(() => {});
+  }, [form.memberId, coop.id]);
+
+  function toggleDelivery(id) {
+    setSelectedDeliveryIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  const selectedTotal = unpaidDeliveries
+    .filter((d) => selectedDeliveryIds.includes(d.id))
+    .reduce((sum, d) => sum + Number(d.totalValue || 0), 0);
+
+  async function recordPayout(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await api.post(`/cooperatives/${coop.id}/payouts`, {
+        ...form,
+        amount: Number(form.amount),
+        produceDeliveryIds: selectedDeliveryIds.length > 0 ? selectedDeliveryIds : undefined,
+      });
+      setForm({ ...form, memberId: "", amount: "", periodLabel: "" });
+      setSelectedDeliveryIds([]);
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to record payout");
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-4 rounded-md bg-kenya-green/5 px-4 py-2 text-xs text-gray-600">
+        This is what feeds the Director&apos;s national disbursement report — every payout recorded here
+        shows up in the trickle-down view of how much individual farmers were compensated.
+      </div>
+
+      {unpaidSummary.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-2 text-xs text-gray-600">
+          <span className="font-medium">Outstanding:</span>
+          {unpaidSummary.map((m) => (
+            <span key={m.memberId} className="rounded-full bg-gray-100 px-2 py-1">{m.memberName}: KES {m.totalOwed.toLocaleString()}</span>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={recordPayout} className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+          <select required className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
+            value={form.memberId} onChange={(e) => setForm({ ...form, memberId: e.target.value })}>
+            <option value="">Select member…</option>
+            {(coop.members || []).map((m) => <option key={m.id} value={m.id}>{m.legalName}</option>)}
+          </select>
+          <input required type="number" min="1" step="0.01" placeholder="Amount (KES)" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+          <select className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+            {PAYOUT_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
+          </select>
+          <select className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>
+            {PAYOUT_METHODS.map((m) => <option key={m} value={m}>{m.replace(/_/g, " ")}</option>)}
+          </select>
+          <input required type="date" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            value={form.payoutDate} onChange={(e) => setForm({ ...form, payoutDate: e.target.value })} />
+        </div>
+        <input placeholder="Period label (e.g. 'July 2026')" className="mt-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm md:w-64"
+          value={form.periodLabel} onChange={(e) => setForm({ ...form, periodLabel: e.target.value })} />
+
+        {unpaidDeliveries.length > 0 && (
+          <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 p-3">
+            <p className="mb-2 text-xs font-medium text-gray-600">Settle against unpaid deliveries (optional):</p>
+            <div className="space-y-1">
+              {unpaidDeliveries.map((d) => (
+                <label key={d.id} className="flex items-center gap-2 text-xs">
+                  <input type="checkbox" checked={selectedDeliveryIds.includes(d.id)} onChange={() => toggleDelivery(d.id)} />
+                  {d.produceType} — {Number(d.quantity).toLocaleString()} {d.unit} on {new Date(d.deliveryDate).toLocaleDateString()}
+                  {d.totalValue ? ` — KES ${Number(d.totalValue).toLocaleString()}` : ""}
+                </label>
+              ))}
+            </div>
+            {selectedDeliveryIds.length > 0 && (
+              <p className="mt-2 text-xs font-medium text-kenya-green">Selected total: KES {selectedTotal.toLocaleString()}</p>
+            )}
+          </div>
+        )}
+
+        <button type="submit" className="mt-3 rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white">
+          Record Payout
+        </button>
+      </form>
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+            <tr>
+              <th className="px-4 py-2">Member</th>
+              <th className="px-4 py-2">Amount</th>
+              <th className="px-4 py-2">Type</th>
+              <th className="px-4 py-2">Period</th>
+              <th className="px-4 py-2">Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payouts.map((p) => (
+              <tr key={p.id} className="border-t border-gray-100">
+                <td className="px-4 py-2 font-medium">{p.member?.legalName}</td>
+                <td className="px-4 py-2">KES {Number(p.amount).toLocaleString()}</td>
+                <td className="px-4 py-2">{p.type.replace(/_/g, " ")}</td>
+                <td className="px-4 py-2">{p.periodLabel || "—"}</td>
+                <td className="px-4 py-2">{new Date(p.payoutDate).toLocaleDateString()}</td>
+              </tr>
+            ))}
+            {payouts.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">No payouts recorded yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const BAND_COLORS = {
+  AA: "bg-green-100 text-green-800 border-green-300",
+  A: "bg-green-50 text-green-700 border-green-200",
+  B: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  C: "bg-orange-100 text-orange-800 border-orange-300",
+  D: "bg-red-100 text-red-800 border-red-300",
+};
+
+const FACTOR_LABELS = {
+  contributionConsistency: "Contribution Consistency",
+  produceConsistency: "Produce Consistency",
+  governanceCompliance: "Governance Compliance",
+  documentCompliance: "Document Compliance",
+  membershipStability: "Membership Stability",
+  shareCapitalTrajectory: "Share Capital Trajectory",
+};
+
+function CreditScoreTab({ coop }) {
+  const [latest, setLatest] = useState(undefined); // undefined = loading, null = none yet
+  const [history, setHistory] = useState([]);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
+
+  function load() {
+    api.get(`/cooperatives/${coop.id}/credit-assessment`).then((res) => setLatest(res.data)).catch((err) => {
+      if (err?.response?.status === 403) setError("Your role cannot view credit assessments for this cooperative.");
+    });
+    api.get(`/cooperatives/${coop.id}/credit-assessment/history`).then((res) => setHistory(res.data)).catch(() => {});
+  }
+
+  useEffect(load, [coop.id]);
+
+  async function runAssessment() {
+    setRunning(true);
+    setError("");
+    try {
+      await api.post(`/cooperatives/${coop.id}/credit-assessment`);
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to run assessment");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
+
+  return (
+    <div>
+      <div className="mb-4 rounded-md border border-kenya-gold/40 bg-kenya-gold/5 px-4 py-3 text-xs text-gray-700">
+        <strong>This platform is a trust layer, not a lender.</strong> This score is a creditworthiness
+        signal a cooperative can present to a bank or micro-lender — it is not a loan offer, pre-approval,
+        or guarantee, and no funds are disbursed here.
+      </div>
+
+      <button
+        onClick={runAssessment}
+        disabled={running}
+        className="mb-6 rounded-md bg-kenya-green px-4 py-2 text-sm font-semibold text-white hover:bg-kenya-green/90 disabled:opacity-50"
+      >
+        {running ? "Running assessment…" : "Run New Assessment"}
+      </button>
+
+      {latest === undefined && <p className="text-gray-400">Loading…</p>}
+      {latest === null && <p className="text-gray-400">No assessment has been run yet. Click &quot;Run New Assessment&quot; to generate one.</p>}
+
+      {latest && (
+        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
+          <div className="flex items-center gap-4">
+            <div className={`flex h-20 w-20 items-center justify-center rounded-full border-4 text-2xl font-extrabold ${BAND_COLORS[latest.band]}`}>
+              {latest.band}
+            </div>
+            <div>
+              <p className="text-3xl font-bold text-kenya-black">{latest.score}<span className="text-base font-normal text-gray-400"> / 100</span></p>
+              <p className="text-sm text-gray-500">{latest.breakdown?.bandLabel}</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Assessed {new Date(latest.createdAt).toLocaleDateString()} by {latest.computedBy?.fullName || "—"}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            {latest.breakdown?.factors && Object.entries(latest.breakdown.factors).map(([key, factor]) => (
+              <div key={key}>
+                <div className="mb-1 flex justify-between text-xs">
+                  <span className="font-medium text-gray-700">{FACTOR_LABELS[key] || key}</span>
+                  <span className="text-gray-500">{factor.score} / 100 · weight {Math.round((latest.breakdown.weights?.[key] || 0) * 100)}%</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-gray-100">
+                  <div
+                    className="h-2 rounded-full bg-kenya-green"
+                    style={{ width: `${factor.score}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {history.length > 1 && (
+        <div>
+          <h3 className="mb-2 font-semibold">History</h3>
+          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+                <tr>
+                  <th className="px-4 py-2">Date</th>
+                  <th className="px-4 py-2">Score</th>
+                  <th className="px-4 py-2">Band</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((h) => (
+                  <tr key={h.id} className="border-t border-gray-100">
+                    <td className="px-4 py-2">{new Date(h.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-2">{h.score}</td>
+                    <td className="px-4 py-2">{h.band}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

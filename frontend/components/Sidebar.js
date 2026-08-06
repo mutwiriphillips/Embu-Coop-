@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/cooperatives", label: "Cooperatives" },
   { href: "/field-ops", label: "Field Visits" },
   { href: "/leave", label: "Leave" },
+  { href: "/disbursements", label: "Farmer Disbursements", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
   { href: "/staff", label: "Staff & Access", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
 ];
 

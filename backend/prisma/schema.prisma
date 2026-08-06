@@ -67,6 +67,10 @@ model User {
   approvedDocs     Document[]        @relation("DocApprover")
   managedCoops     Cooperative[]     @relation("CoopManager")
   auditLogs        AuditLog[]
+  recordedContributions Contribution[]     @relation("ContributionRecordedBy")
+  creditAssessmentsRun  CreditAssessment[] @relation("CreditAssessmentComputedBy")
+  recordedProduce       ProduceDelivery[]  @relation("ProduceRecordedBy")
+  recordedPayouts       Payout[]           @relation("PayoutRecordedBy")
 
   @@index([countyId])
 }
@@ -187,6 +191,10 @@ model Cooperative {
   committees      Committee[]
   agms            AGM[]
   candidates      ElectionCandidate[]
+  contributions   Contribution[]
+  creditAssessments CreditAssessment[]
+  produceDeliveries ProduceDelivery[]
+  payouts         Payout[]
 
   @@index([valueChain])
   @@index([countyId, subCounty, ward])
@@ -209,7 +217,141 @@ model Member {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
+  contributions  Contribution[]
+  produceDeliveries ProduceDelivery[]
+  payouts        Payout[]
+
   @@unique([cooperativeId, nationalId])
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 6: Financial Ledger & Credit Readiness (trust layer, not a lender —
+// this system scores creditworthiness for third-party lenders; it never
+// disburses funds itself)
+// ---------------------------------------------------------------------------
+
+enum ContributionType {
+  MONTHLY_CONTRIBUTION
+  SHARE_CAPITAL_TOPUP
+  LOAN_REPAYMENT
+  OTHER
+}
+
+// Shared by Contribution (money IN from members) and Payout (money OUT to
+// members) so both ledgers use one consistent set of payment rails.
+enum PaymentMethod {
+  MPESA
+  CASH
+  BANK_TRANSFER
+  OTHER
+}
+
+model Contribution {
+  id               String              @id @default(uuid())
+  memberId         String
+  member           Member              @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  cooperativeId    String
+  cooperative      Cooperative         @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  amount           Decimal             @db.Decimal(14, 2)
+  type             ContributionType    @default(MONTHLY_CONTRIBUTION)
+  method           PaymentMethod       @default(CASH)
+  externalRef      String?             // e.g. M-Pesa receipt number, for future Daraja reconciliation
+  contributionDate DateTime
+  recordedById     String?
+  recordedBy       User?               @relation("ContributionRecordedBy", fields: [recordedById], references: [id])
+  createdAt        DateTime            @default(now())
+
+  @@index([memberId, contributionDate])
+  @@index([cooperativeId, contributionDate])
+}
+
+// ---------------------------------------------------------------------------
+// Produce deliveries (what a member physically delivers — coffee cherries,
+// milk, tea leaf, etc.) and Payouts (money OUT to members, typically to
+// compensate delivered produce). Together these are the other half of the
+// financial ledger — Contribution/CreditAssessment above track money and
+// trust coming IN; these track goods and money going OUT to the farmer.
+// ---------------------------------------------------------------------------
+
+enum ProduceUnit {
+  KG
+  LITERS
+  BAGS
+  CRATES
+  OTHER
+}
+
+model ProduceDelivery {
+  id            String       @id @default(uuid())
+  memberId      String
+  member        Member       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  cooperativeId String
+  cooperative   Cooperative  @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  produceType   String       // e.g. "Coffee Cherries", "Whole Milk" — free text, suggested from the cooperative's value chain
+  quantity      Decimal      @db.Decimal(12, 2)
+  unit          ProduceUnit  @default(KG)
+  qualityGrade  String?      // e.g. "AA", "AB", "PB" for coffee
+  ratePerUnit   Decimal?     @db.Decimal(10, 2) // KES per unit, may be set later once the buyer's price is known
+  totalValue    Decimal?     @db.Decimal(14, 2) // quantity * ratePerUnit, snapshotted when set
+  deliveryDate  DateTime
+  paid          Boolean      @default(false)
+  payoutId      String?
+  payout        Payout?      @relation(fields: [payoutId], references: [id])
+  recordedById  String?
+  recordedBy    User?        @relation("ProduceRecordedBy", fields: [recordedById], references: [id])
+  createdAt     DateTime     @default(now())
+
+  @@index([memberId, deliveryDate])
+  @@index([cooperativeId, deliveryDate])
+}
+
+enum PayoutType {
+  PRODUCE_PAYMENT
+  DIVIDEND
+  BONUS
+  OTHER
+}
+
+// Money the cooperative pays OUT to a member — this is the "trickle-down"
+// data the Director's compliance dashboard reports on: exactly how much
+// each farmer was compensated, and when.
+model Payout {
+  id            String      @id @default(uuid())
+  memberId      String
+  member        Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  cooperativeId String
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  amount        Decimal     @db.Decimal(14, 2)
+  type          PayoutType  @default(PRODUCE_PAYMENT)
+  method        PaymentMethod @default(CASH)
+  externalRef   String?
+  periodLabel   String?     // e.g. "July 2026" — free text grouping for reporting
+  payoutDate    DateTime
+  recordedById  String?
+  recordedBy    User?       @relation("PayoutRecordedBy", fields: [recordedById], references: [id])
+  createdAt     DateTime    @default(now())
+
+  produceDeliveries ProduceDelivery[]
+
+  @@index([memberId, payoutDate])
+  @@index([cooperativeId, payoutDate])
+}
+
+// A point-in-time credit-readiness assessment for a cooperative. Stored
+// (not just computed on the fly) so a report can be exported/shared with a
+// third-party lender and its inputs stay auditable after the fact.
+model CreditAssessment {
+  id            String      @id @default(uuid())
+  cooperativeId String
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  score         Int         // 0-100 composite
+  band          String      // AA / A / B / C / D — see utils/creditScore.js
+  breakdown     Json        // per-factor scores + raw inputs, for transparency
+  computedById  String?
+  computedBy    User?       @relation("CreditAssessmentComputedBy", fields: [computedById], references: [id])
+  createdAt     DateTime    @default(now())
+
+  @@index([cooperativeId, createdAt])
 }
 
 // ---------------------------------------------------------------------------

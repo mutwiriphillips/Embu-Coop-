@@ -11,7 +11,8 @@
     "prisma:migrate": "prisma migrate dev",
     "seed": "node prisma/seed.js",
     "seed:counties": "node prisma/seed-counties.js",
-    "seed:pilot": "node prisma/seed-pilot.js"
+    "seed:pilot": "node prisma/seed-pilot.js",
+    "test:credit-score": "node src/utils/creditScore.test.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
