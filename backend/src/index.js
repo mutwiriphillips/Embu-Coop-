@@ -19,6 +19,8 @@ const creditAssessmentRoutes = require("./routes/creditAssessment");
 const produceRoutes = require("./routes/produce");
 const payoutRoutes = require("./routes/payouts");
 const reportsRoutes = require("./routes/reports");
+const memberAuthRoutes = require("./routes/memberAuth");
+const memberRoutes = require("./routes/member");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -52,6 +54,8 @@ app.use("/api/cooperatives/:id/produce", produceRoutes);
 app.use("/api/cooperatives/:id/payouts", payoutRoutes);
 app.use("/api/field-ops", fieldOpsRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/member-auth", memberAuthRoutes);
+app.use("/api/member", memberRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 app.use(errorHandler);

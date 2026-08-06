@@ -15,6 +15,9 @@ async function authenticate(req, res, next) {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
+    if (payload.type === "member") {
+      return res.status(401).json({ error: "Invalid token type for this endpoint" });
+    }
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
       include: { permissions: true, county: true },
@@ -107,4 +110,43 @@ function requireCooperativeAccess() {
   };
 }
 
-module.exports = { authenticate, requireRole, requirePermission, requireCooperativeAccess };
+/**
+ * Verifies a MEMBER token (separate JWT audience from staff tokens — see
+ * memberAuthController.signMemberToken). Attaches req.member (the Member
+ * record) and req.memberAccount to the request. Member-facing routes never
+ * accept a memberId/cooperativeId from the client — everything is derived
+ * from the authenticated token, so one member can never query another
+ * member's data by guessing an ID.
+ */
+async function authenticateMember(req, res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+
+  if (!token) {
+    return res.status(401).json({ error: "Missing or invalid Authorization header" });
+  }
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    if (payload.type !== "member") {
+      return res.status(401).json({ error: "Invalid token type for this endpoint" });
+    }
+
+    const account = await prisma.memberAccount.findUnique({
+      where: { id: payload.sub },
+      include: { member: { include: { cooperative: true } } },
+    });
+
+    if (!account || !account.active) {
+      return res.status(401).json({ error: "Account not found or deactivated" });
+    }
+
+    req.memberAccount = account;
+    req.member = account.member;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+module.exports = { authenticate, authenticateMember, requireRole, requirePermission, requireCooperativeAccess };

@@ -195,6 +195,20 @@ async function main() {
       where: { id: { in: settled.map((d) => d.id) } },
       data: { paid: true, payoutId: payout.id },
     });
+
+    // Member self-service account for the seeded Test Member, so the pilot
+    // can demo the Member Portal immediately without registering by hand.
+    const existingAccount = await prisma.memberAccount.findUnique({ where: { memberId: seededMember.id } });
+    if (!existingAccount) {
+      await prisma.memberAccount.create({
+        data: {
+          memberId: seededMember.id,
+          nationalId: seededMember.nationalId,
+          phoneNumber: "+254700000001",
+          passwordHash,
+        },
+      });
+    }
   }
 
   console.log("Pilot seed complete. All accounts share the password:", PILOT_PASSWORD);
@@ -203,6 +217,7 @@ async function main() {
   console.log(`  Employee (Field Officer): employee@embu.go.ke`);
   console.log(`  Manager: manager@embu.go.ke`);
   console.log(`  Cooperative: ${cooperative.name} (${cooperative.registrationNumber}) — Embu County`);
+  console.log(`  Member Portal login: National ID "PILOT-0001", password "${PILOT_PASSWORD}"`);
 }
 
 main()

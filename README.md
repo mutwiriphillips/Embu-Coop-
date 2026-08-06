@@ -38,6 +38,10 @@ always filtered to their own county's data regardless of what the client sends.
    (coffee, milk, tea, etc.), payout/disbursement ledger, and a transparent credit-scoring
    engine cooperatives can use to demonstrate creditworthiness to third-party lenders.
    **This platform never disburses loans — it is a trust layer, not a lender.**
+7. **Member Self-Service Portal** — a genuinely separate `MEMBER` auth tier (not a staff
+   account) at `/member`. Registration is verified by matching a submitted National ID
+   against the cooperative's own `Member` records — see the Module 7 section below for
+   the honest scope boundary on what "verified" means here.
 
 ## Project Structure
 
@@ -117,7 +121,56 @@ deploying this on Render with open self-signup enabled for testers.
   members). Non-elected Executive Manager is excluded. Violations block submission
   unless the Director overrides with a logged justification.
 
-## Credit Readiness Scoring (Module 6)
+## Member Self-Service Portal (Module 7)
+
+A completely separate identity tier from staff — `MemberAccount`, not `User`.
+The two are architecturally isolated:
+
+- **Separate JWTs.** Staff tokens carry `type: "staff"`, member tokens carry
+  `type: "member"`. Each auth middleware (`authenticate` vs
+  `authenticateMember` in `backend/src/middleware/auth.js`) rejects the
+  other's token outright — verified with real crafted JWTs during testing,
+  not assumed.
+- **Separate frontend auth context, separate token storage.** `MemberAuthContext`
+  and `lib/memberApi.js` never share a localStorage key with the staff
+  `AuthContext`/`lib/api.js` — a staff member and a farmer could, in
+  principle, be logged into both in the same browser without collision.
+- **Self-scoped API.** Every `/api/member/*` route derives the member's
+  identity entirely from their JWT — no route ever accepts a memberId or
+  cooperativeId from the client, so one member can never query another's
+  data by guessing an ID.
+
+### Registration & "verification" — an honest scope boundary
+
+Registration (`POST /api/member-auth/register`) matches a submitted National
+ID + selected cooperative against an existing `Member` record that staff
+already created via the Cooperative Registry. **This is not a government ID
+check** — there is no integration with IPRS, eCitizen, or any external
+registry. It verifies against the cooperative's own membership records,
+which is the only ground truth this platform actually has access to. That's
+a deliberate, documented boundary so the trial run behaves exactly like the
+real thing would, without pretending to a capability (government ID
+verification) that would need a separate formal agreement to build.
+
+### Digital contributions — simulated, clearly labeled
+
+`POST /api/member/contributions/initiate` lets a member record a
+contribution themselves, as if an M-Pesa STK Push had already completed.
+There is no real Safaricom Daraja integration wired up (needs a shortcode,
+passkey, and a public callback URL this environment doesn't have) — the
+response and the UI both say "simulated" so this is never mistaken for a
+real payment. The `Contribution.method` and `externalRef` fields already
+exist for exactly this integration; wiring real Daraja later means adding an
+STK Push request plus a public webhook route, not restructuring the ledger.
+
+### What members can and can't do
+
+- View their own contribution, produce delivery, and payout history
+- Make a (simulated) digital contribution
+- View their cooperative's meeting record and current credit standing
+- **Cannot** self-report produce deliveries — those stay staff-recorded
+  (Cooperative Manager or Field Officer at drop-off) so the credit-scoring
+  signal stays trustworthy, not self-reported
 
 `backend/src/utils/creditScore.js` computes a 0–100 composite score across six
 weighted factors — contribution consistency (20%), **produce consistency

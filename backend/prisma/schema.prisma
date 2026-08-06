@@ -220,8 +220,37 @@ model Member {
   contributions  Contribution[]
   produceDeliveries ProduceDelivery[]
   payouts        Payout[]
+  account        MemberAccount?
 
   @@unique([cooperativeId, nationalId])
+}
+
+// ---------------------------------------------------------------------------
+// Member self-service auth tier — deliberately a SEPARATE identity from
+// User (staff). A member never becomes a staff account and vice versa; the
+// two token types are not interchangeable (see authenticateMember vs
+// authenticate in middleware/auth.js). Registration is gated by matching a
+// submitted National ID against an existing Member record that staff
+// already created — this system does not verify National IDs against any
+// external government registry, it verifies against the cooperative's own
+// records, which is the ground truth this platform actually has access to.
+// ---------------------------------------------------------------------------
+
+model MemberAccount {
+  id           String    @id @default(uuid())
+  memberId     String    @unique
+  member       Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  // Denormalized from Member.nationalId at registration time so login can do
+  // a single unique lookup. National IDs are unique per Kenyan citizen, so
+  // this is a reasonable global-uniqueness assumption even though Member's
+  // own uniqueness is only per-cooperative.
+  nationalId   String    @unique
+  phoneNumber  String
+  email        String?
+  passwordHash String
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
 }
 
 // ---------------------------------------------------------------------------

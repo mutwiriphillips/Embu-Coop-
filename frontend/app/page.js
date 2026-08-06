@@ -61,9 +61,12 @@ export default function LandingPage() {
             <p className="text-xs text-gray-500">State Department for Co-operatives</p>
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          <Link href="/member/login" className="text-sm font-medium text-kenya-black hover:underline">
+            I&apos;m a Farmer
+          </Link>
           <Link href="/login" className="rounded-md border border-kenya-green px-4 py-2 text-sm font-semibold text-kenya-green hover:bg-kenya-green/5">
-            Sign In
+            Staff Sign In
           </Link>
           <Link href="/signup" className="rounded-md bg-kenya-green px-4 py-2 text-sm font-semibold text-white hover:bg-kenya-green/90">
             Test-Run Signup
@@ -87,11 +90,11 @@ export default function LandingPage() {
               compliance, built for all 47 counties of Kenya.
             </p>
             <div className="mt-6 flex gap-3">
-              <Link href="/signup" className="rounded-md bg-kenya-red px-5 py-2.5 text-sm font-semibold text-white hover:bg-kenya-red/90">
-                Try the Pilot
+              <Link href="/member/register" className="rounded-md bg-kenya-red px-5 py-2.5 text-sm font-semibold text-white hover:bg-kenya-red/90">
+                Register as a Farmer
               </Link>
-              <Link href="/login" className="rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-kenya-black hover:bg-gray-100">
-                Sign In
+              <Link href="/signup" className="rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-kenya-black hover:bg-gray-100">
+                Staff Test-Run
               </Link>
             </div>
           </div>
