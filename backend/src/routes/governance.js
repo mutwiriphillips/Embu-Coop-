@@ -1,17 +1,18 @@
 const express = require("express");
-const { authenticate, requireRole, requirePermission } = require("../middleware/auth");
+const { authenticate, requireRole, requirePermission, requireCooperativeAccess } = require("../middleware/auth");
 const ctrl = require("../controllers/governanceController");
 
 // Mounted at /api/cooperatives/:id/governance
 const router = express.Router({ mergeParams: true });
 router.use(authenticate);
+router.use(requireCooperativeAccess());
 
 // Committees
 router.get("/committees", requirePermission("governance", "canView"), ctrl.listCommittees);
 router.post("/committees", requirePermission("governance", "canEdit"), ctrl.saveCommittee);
 router.post(
   "/committees/:committeeId/override",
-  requireRole("DIRECTOR"),
+  requireRole("NATIONAL_ADMIN", "DIRECTOR"),
   ctrl.overrideCommittee
 );
 router.post(

@@ -149,4 +149,37 @@ async function authenticateMember(req, res, next) {
   }
 }
 
-module.exports = { authenticate, authenticateMember, requireRole, requirePermission, requireCooperativeAccess };
+/**
+ * Same principle as requireCooperativeAccess, applied to staff records
+ * (req.params.id is a User id here, not a Cooperative id). A Director
+ * should never be able to view/modify a staff account in another county by
+ * guessing a user ID. Attaches req.targetStaff.
+ */
+function requireStaffAccess() {
+  return async (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: "Not authenticated" });
+
+    const targetStaff = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!targetStaff) return res.status(404).json({ error: "Staff account not found" });
+
+    if (req.user.role === "NATIONAL_ADMIN") {
+      req.targetStaff = targetStaff;
+      return next();
+    }
+
+    if (targetStaff.countyId !== req.user.countyId) {
+      return res.status(403).json({ error: "This staff account is outside your county" });
+    }
+    req.targetStaff = targetStaff;
+    next();
+  };
+}
+
+module.exports = {
+  authenticate,
+  authenticateMember,
+  requireRole,
+  requirePermission,
+  requireCooperativeAccess,
+  requireStaffAccess,
+};

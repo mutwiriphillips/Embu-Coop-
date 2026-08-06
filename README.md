@@ -215,14 +215,31 @@ frontend, `GET /api/reports/disbursements` in the API) is a trickle-down
 report: National (all counties, National Admin only) → County → Cooperative
 → individual farmer compensation amounts, filterable by date range.
 
-**Ownership scoping, enforced in code:** a new `requireCooperativeAccess`
-middleware (`backend/src/middleware/auth.js`) ensures a Cooperative Manager
-can only ever touch their *own* cooperative's financial data — not any
-cooperative they happen to guess an ID for — and county staff are always
-scoped to their own county. This is applied to contributions, produce,
-payouts, and credit-assessment routes. **The same check has not yet been
-retrofitted onto the older Documents and Governance routes**, which still
-rely on role/permission checks alone — worth closing in a follow-up pass.
+**Ownership scoping, enforced in code:** `requireCooperativeAccess`
+(`backend/src/middleware/auth.js`) ensures a Cooperative Manager can only
+ever touch their *own* cooperative's data — not any cooperative they happen
+to guess an ID for — and county staff are always scoped to their own county.
+As of this pass, this is applied to **every** cooperative-scoped route:
+contributions, produce, payouts, credit-assessment, documents, governance,
+and the cooperative/member-roll routes themselves. A companion
+`requireStaffAccess` middleware applies the same county-matching principle
+to staff management, so a Director can no longer view, edit, deactivate, or
+change permissions on a staff account in another county by guessing its ID.
+
+Both middlewares were verified with a targeted test stub that simulates real
+distinguishing data (a Director in "County A" against cooperatives/staff in
+both "County A" and "County B") — same-county access passes through to the
+controller, cross-county access is rejected with 403, nonexistent IDs return
+404. This is a materially stronger test than "does it 401 with no token,"
+which is all a blanket stub can prove.
+
+While auditing this, also found and fixed several `requireRole(...)` lists
+across Documents, Governance, and Field Operations that predated the
+national rollout and had never been updated to include `NATIONAL_ADMIN` —
+meaning a National Admin account could previously view staff/cooperative
+data everywhere via `requirePermission`'s bypass, but could not review
+documents, approve documents, override governance compliance, or decide
+leave/visit requests, despite the role's intended cross-county oversight.
 
 
 ## Open Items From Scope (to confirm with County before Phase 2)
