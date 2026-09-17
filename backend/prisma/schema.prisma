@@ -71,6 +71,8 @@ model User {
   creditAssessmentsRun  CreditAssessment[] @relation("CreditAssessmentComputedBy")
   recordedProduce       ProduceDelivery[]  @relation("ProduceRecordedBy")
   recordedPayouts       Payout[]           @relation("PayoutRecordedBy")
+  recordedAssets        Asset[]            @relation("AssetRecordedBy")
+  recordedAssetEvents   AssetEvent[]       @relation("AssetEventRecordedBy")
 
   @@index([countyId])
 }
@@ -195,6 +197,7 @@ model Cooperative {
   creditAssessments CreditAssessment[]
   produceDeliveries ProduceDelivery[]
   payouts         Payout[]
+  assets          Asset[]
 
   @@index([valueChain])
   @@index([countyId, subCounty, ward])
@@ -221,8 +224,91 @@ model Member {
   produceDeliveries ProduceDelivery[]
   payouts        Payout[]
   account        MemberAccount?
+  assets         Asset[]
 
   @@unique([cooperativeId, nationalId])
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 8: Asset & Livestock Generalization (Phase 2)
+// ---------------------------------------------------------------------------
+// One model covers every "discrete tracked asset" value chain rather than a
+// bespoke table per chain — a dairy cow, a boda boda, and a housing unit are
+// structurally the same thing: something a member owns, with a status and a
+// lifecycle of events. This is the same "shape, not chain" reduction applied
+// to ProduceDelivery for the 9 consumable-produce chains. Applies to exactly
+// the value chains named in ASSET_TRACKED_VALUE_CHAINS in utils/creditScore.js
+// (LIVESTOCK, POULTRY, HOUSING, TRANSPORT) — every other cooperative simply
+// never has Asset rows, and the credit engine renormalizes around that
+// factor's absence rather than scoring it as a failure.
+
+enum AssetType {
+  LIVESTOCK      // e.g. dairy cattle, goats
+  POULTRY        // e.g. layer/broiler flocks
+  VEHICLE        // Transport SACCOs — boda boda, matatu
+  PROPERTY_UNIT  // Housing cooperatives — a unit/plot
+  OTHER
+}
+
+enum AssetStatus {
+  ACTIVE
+  TRANSFERRED
+  SOLD
+  DECEASED       // livestock/poultry only, in practice
+  WRITTEN_OFF
+}
+
+model Asset {
+  id               String      @id @default(uuid())
+  memberId         String
+  member           Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  cooperativeId    String
+  cooperative      Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  assetType        AssetType
+  identifier       String      // ear tag, plate number, unit number — whatever traces this specific asset
+  description      String?     // breed, make/model, unit details
+  acquisitionDate  DateTime
+  acquisitionValue Decimal?    @db.Decimal(14, 2)
+  currentValue     Decimal?    @db.Decimal(14, 2) // updated by VALUATION_UPDATE events
+  status           AssetStatus @default(ACTIVE)
+  recordedById     String?
+  recordedBy       User?       @relation("AssetRecordedBy", fields: [recordedById], references: [id])
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  events           AssetEvent[]
+
+  @@unique([cooperativeId, identifier])
+  @@index([memberId])
+  @@index([cooperativeId, assetType])
+}
+
+enum AssetEventType {
+  ACQUIRED
+  TRANSFERRED
+  SOLD
+  DECEASED
+  WRITTEN_OFF
+  VALUATION_UPDATE
+  HEALTH_CHECK      // livestock/poultry: a vet or field-officer wellness record
+}
+
+// Every lifecycle moment for an asset — this is the audit trail a lender (or
+// a Director) can actually trust, and what "dead-cow swap" style fraud looks
+// like when it's a logged event chain instead of a self-report.
+model AssetEvent {
+  id            String         @id @default(uuid())
+  assetId       String
+  asset         Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  eventType     AssetEventType
+  eventDate     DateTime
+  notes         String?
+  valueAtEvent  Decimal?       @db.Decimal(14, 2)
+  recordedById  String?
+  recordedBy    User?          @relation("AssetEventRecordedBy", fields: [recordedById], references: [id])
+  createdAt     DateTime       @default(now())
+
+  @@index([assetId, eventDate])
 }
 
 // ---------------------------------------------------------------------------

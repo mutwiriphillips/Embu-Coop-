@@ -6,13 +6,18 @@ const { recordAudit } = require("../utils/audit");
 async function summary(req, res) {
   const memberId = req.member.id;
   const cooperativeId = req.member.cooperativeId;
+  const valueChain = req.member.cooperative.valueChain;
+  const tracksAssets = ["LIVESTOCK", "POULTRY", "HOUSING", "TRANSPORT"].includes(valueChain);
 
-  const [contributions, produceDeliveries, payouts, latestAssessment, agms] = await Promise.all([
+  const [contributions, produceDeliveries, payouts, latestAssessment, agms, assets] = await Promise.all([
     prisma.contribution.findMany({ where: { memberId }, select: { amount: true, contributionDate: true, type: true } }),
     prisma.produceDelivery.findMany({ where: { memberId }, select: { totalValue: true, paid: true, quantity: true, unit: true } }),
     prisma.payout.findMany({ where: { memberId }, select: { amount: true, payoutDate: true } }),
     prisma.creditAssessment.findFirst({ where: { cooperativeId }, orderBy: { createdAt: "desc" } }),
     prisma.aGM.findMany({ where: { cooperativeId }, orderBy: { meetingDate: "desc" }, take: 3 }),
+    tracksAssets
+      ? prisma.asset.findMany({ where: { memberId }, select: { status: true, currentValue: true, acquisitionValue: true } })
+      : Promise.resolve([]),
   ]);
 
   const totalContributions = contributions.reduce((sum, c) => sum + Number(c.amount), 0);
@@ -21,6 +26,9 @@ async function summary(req, res) {
     .filter((d) => !d.paid)
     .reduce((sum, d) => sum + Number(d.totalValue || 0), 0);
   const totalPayouts = payouts.reduce((sum, p) => sum + Number(p.amount), 0);
+
+  const activeAssets = assets.filter((a) => a.status === "ACTIVE");
+  const totalAssetValue = activeAssets.reduce((sum, a) => sum + Number(a.currentValue || a.acquisitionValue || 0), 0);
 
   const thisMonth = new Date();
   thisMonth.setDate(1);
@@ -46,6 +54,7 @@ async function summary(req, res) {
       unpaidProduceBalance,
       totalPayouts,
       totalDeliveries: produceDeliveries.length,
+      ...(tracksAssets ? { activeAssetCount: activeAssets.length, totalAssetValue } : {}),
     },
     cooperativeCreditStanding: latestAssessment
       ? { score: latestAssessment.score, band: latestAssessment.band, asOf: latestAssessment.createdAt }
@@ -68,6 +77,19 @@ async function listProduce(req, res) {
     orderBy: { deliveryDate: "desc" },
   });
   res.json(deliveries);
+}
+
+// GET /api/member/assets — self-view, same shape as the staff-side listing
+// but scoped entirely to the token's own member record. Read-only: a member
+// can see their own asset/lifecycle history but never self-report it — the
+// same "staff-recorded, not self-reported" boundary Produce already applies.
+async function listAssets(req, res) {
+  const assets = await prisma.asset.findMany({
+    where: { memberId: req.member.id },
+    include: { events: { orderBy: { eventDate: "desc" } } },
+    orderBy: { acquisitionDate: "desc" },
+  });
+  res.json(assets);
 }
 
 async function listPayouts(req, res) {
@@ -143,4 +165,4 @@ async function initiateContribution(req, res) {
   });
 }
 
-module.exports = { summary, listContributions, listProduce, listPayouts, listAgms, initiateContribution };
+module.exports = { summary, listContributions, listProduce, listAssets, listPayouts, listAgms, initiateContribution };

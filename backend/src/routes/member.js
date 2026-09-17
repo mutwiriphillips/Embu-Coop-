@@ -9,6 +9,7 @@ router.get("/summary", ctrl.summary);
 router.get("/contributions", ctrl.listContributions);
 router.post("/contributions/initiate", ctrl.initiateContribution);
 router.get("/produce", ctrl.listProduce);
+router.get("/assets", ctrl.listAssets);
 router.get("/payouts", ctrl.listPayouts);
 router.get("/agms", ctrl.listAgms);
 

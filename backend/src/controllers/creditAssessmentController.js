@@ -1,13 +1,18 @@
 const prisma = require("../config/db");
-const { computeCreditAssessment } = require("../utils/creditScore");
+const { computeCreditAssessment, ASSET_TRACKED_VALUE_CHAINS } = require("../utils/creditScore");
 const { deriveCommitteeStatus } = require("../utils/governance");
 const { recordAudit } = require("../utils/audit");
 
 // Gathers everything the scoring engine needs for one cooperative, refreshing
 // each committee's derived status the same way governanceController does —
-// so a stale stored status never silently skews the score.
-async function gatherAssessmentInputs(cooperativeId) {
-  const [members, contributions, produceDeliveries, documents, committeesRaw] = await Promise.all([
+// so a stale stored status never silently skews the score. Asset/assetEvent
+// queries only run when the cooperative's value chain actually tracks a
+// discrete asset — no point fetching data the engine will never look at.
+async function gatherAssessmentInputs(cooperative) {
+  const cooperativeId = cooperative.id;
+  const assetTrackingApplies = ASSET_TRACKED_VALUE_CHAINS.includes(cooperative.valueChain);
+
+  const [members, contributions, produceDeliveries, documents, committeesRaw, assets] = await Promise.all([
     prisma.member.findMany({ where: { cooperativeId }, select: { id: true, createdAt: true } }),
     prisma.contribution.findMany({
       where: { cooperativeId },
@@ -22,6 +27,9 @@ async function gatherAssessmentInputs(cooperativeId) {
       where: { cooperativeId },
       include: { members: true },
     }),
+    assetTrackingApplies
+      ? prisma.asset.findMany({ where: { cooperativeId }, select: { id: true, memberId: true, status: true } })
+      : Promise.resolve([]),
   ]);
 
   const committees = committeesRaw.map((c) => ({
@@ -30,7 +38,15 @@ async function gatherAssessmentInputs(cooperativeId) {
     complianceOverride: c.complianceOverride,
   }));
 
-  return { members, contributions, produceDeliveries, documents, committees };
+  let assetEvents = [];
+  if (assetTrackingApplies && assets.length > 0) {
+    assetEvents = await prisma.assetEvent.findMany({
+      where: { assetId: { in: assets.map((a) => a.id) } },
+      select: { assetId: true, eventDate: true },
+    });
+  }
+
+  return { members, contributions, produceDeliveries, documents, committees, assets, assetEvents, valueChain: cooperative.valueChain };
 }
 
 // POST /cooperatives/:id/credit-assessment — runs a fresh assessment and
@@ -39,7 +55,7 @@ async function gatherAssessmentInputs(cooperativeId) {
 // standing — not self-servable by the cooperative's own manager.
 async function runAssessment(req, res) {
   const cooperative = await prisma.cooperative.findUniqueOrThrow({ where: { id: req.params.id } });
-  const inputs = await gatherAssessmentInputs(cooperative.id);
+  const inputs = await gatherAssessmentInputs(cooperative);
   const result = computeCreditAssessment(inputs);
 
   const assessment = await prisma.creditAssessment.create({

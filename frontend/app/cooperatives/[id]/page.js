@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ProtectedRoute from "../../../components/ProtectedRoute";
 import api from "../../../lib/api";
 
-const TABS = ["Members", "Contributions", "Produce", "Payouts", "Documents", "Governance", "AGM", "Credit Score"];
+const ASSET_TRACKED_VALUE_CHAINS = ["LIVESTOCK", "POULTRY", "HOUSING", "TRANSPORT"];
+const BASE_TABS = ["Members", "Contributions", "Produce", "Payouts", "Documents", "Governance", "AGM", "Credit Score"];
 
 export default function CooperativeDetailPage() {
   const { id } = useParams();
@@ -47,7 +48,10 @@ export default function CooperativeDetailPage() {
       </p>
 
       <div className="mb-6 flex gap-2 border-b border-gray-200">
-        {TABS.map((t) => (
+        {(ASSET_TRACKED_VALUE_CHAINS.includes(coop.valueChain)
+          ? [...BASE_TABS.slice(0, 3), "Assets", ...BASE_TABS.slice(3)]
+          : BASE_TABS
+        ).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -63,6 +67,7 @@ export default function CooperativeDetailPage() {
       {tab === "Members" && <MembersTab coop={coop} onChange={reload} />}
       {tab === "Contributions" && <ContributionsTab coop={coop} />}
       {tab === "Produce" && <ProduceTab coop={coop} />}
+      {tab === "Assets" && <AssetsTab coop={coop} />}
       {tab === "Payouts" && <PayoutsTab coop={coop} />}
       {tab === "Documents" && <DocumentsTab coop={coop} onChange={reload} />}
       {tab === "Governance" && <GovernanceTab coop={coop} onChange={reload} />}
@@ -667,6 +672,216 @@ function ProduceTab({ coop }) {
   );
 }
 
+const ASSET_TYPES = ["LIVESTOCK", "POULTRY", "VEHICLE", "PROPERTY_UNIT", "OTHER"];
+const ASSET_TYPE_SUGGESTIONS = {
+  LIVESTOCK: { type: "LIVESTOCK", label: "e.g. Dairy Cow, Goat" },
+  POULTRY: { type: "POULTRY", label: "e.g. Layer Chicken flock" },
+  HOUSING: { type: "PROPERTY_UNIT", label: "e.g. Housing Unit / Plot" },
+  TRANSPORT: { type: "VEHICLE", label: "e.g. Boda Boda, Matatu" },
+};
+const ASSET_EVENT_TYPES = ["ACQUIRED", "TRANSFERRED", "SOLD", "DECEASED", "WRITTEN_OFF", "VALUATION_UPDATE", "HEALTH_CHECK"];
+const ASSET_STATUS_LABELS = {
+  ACTIVE: "Active",
+  TRANSFERRED: "Transferred",
+  SOLD: "Sold",
+  DECEASED: "Deceased",
+  WRITTEN_OFF: "Written Off",
+};
+
+function AssetsTab({ coop }) {
+  const suggestion = ASSET_TYPE_SUGGESTIONS[coop.valueChain];
+  const [assets, setAssets] = useState([]);
+  const [form, setForm] = useState({
+    memberId: "",
+    assetType: suggestion?.type || "OTHER",
+    identifier: "",
+    description: "",
+    acquisitionDate: new Date().toISOString().slice(0, 10),
+    acquisitionValue: "",
+  });
+  const [expandedAssetId, setExpandedAssetId] = useState(null);
+  const [eventForm, setEventForm] = useState({ eventType: "HEALTH_CHECK", eventDate: new Date().toISOString().slice(0, 10), notes: "", valueAtEvent: "" });
+  const [statementMemberId, setStatementMemberId] = useState("");
+  const [error, setError] = useState("");
+
+  function load() {
+    api.get(`/cooperatives/${coop.id}/assets`).then((res) => setAssets(res.data)).catch(() => {});
+  }
+  useEffect(load, [coop.id]);
+
+  async function recordAsset(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await api.post(`/cooperatives/${coop.id}/assets`, {
+        ...form,
+        acquisitionValue: form.acquisitionValue ? Number(form.acquisitionValue) : undefined,
+        description: form.description || undefined,
+      });
+      setForm({ ...form, memberId: "", identifier: "", description: "", acquisitionValue: "" });
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to record asset");
+    }
+  }
+
+  async function recordEvent(assetId) {
+    setError("");
+    try {
+      await api.post(`/cooperatives/${coop.id}/assets/${assetId}/events`, {
+        ...eventForm,
+        valueAtEvent: eventForm.valueAtEvent ? Number(eventForm.valueAtEvent) : undefined,
+        notes: eventForm.notes || undefined,
+      });
+      setExpandedAssetId(null);
+      setEventForm({ eventType: "HEALTH_CHECK", eventDate: new Date().toISOString().slice(0, 10), notes: "", valueAtEvent: "" });
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to record event");
+    }
+  }
+
+  async function downloadStatement() {
+    if (!statementMemberId) return;
+    setError("");
+    try {
+      const { data } = await api.get(`/cooperatives/${coop.id}/assets/statement`, { params: { memberId: statementMemberId } });
+      const rows = [
+        ["Asset Statement", data.member.legalName, data.member.nationalId, `Generated ${new Date(data.generatedAt).toLocaleString()}`],
+        [],
+        ["Type", "Identifier", "Description", "Acquired", "Status", "Current Value"],
+        ...data.assets.map((a) => [
+          a.assetType, a.identifier, a.description || "", new Date(a.acquisitionDate).toLocaleDateString(),
+          ASSET_STATUS_LABELS[a.status] || a.status, a.currentValue || a.acquisitionValue || 0,
+        ]),
+        [],
+        ["Total Active Assets", data.totalActiveAssets],
+        ["Total Current Value (KES)", data.totalCurrentValue],
+      ];
+      const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `asset-statement-${data.member.legalName.replace(/\s+/g, "_")}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to generate statement");
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-4 rounded-md bg-kenya-green/5 px-4 py-2 text-xs text-gray-600">
+        One asset model covers Livestock, Poultry, Housing units, and Transport SACCO vehicles — a dairy cow,
+        a boda boda, and a housing unit are all: something a member owns, with a status and a lifecycle of events.
+        Feeds directly into the Asset Stability credit factor for this value chain.
+      </div>
+
+      <form onSubmit={recordAsset} className="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-6">
+        <select required className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
+          value={form.memberId} onChange={(e) => setForm({ ...form, memberId: e.target.value })}>
+          <option value="">Select member…</option>
+          {(coop.members || []).map((m) => <option key={m.id} value={m.id}>{m.legalName}</option>)}
+        </select>
+        <select className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.assetType} onChange={(e) => setForm({ ...form, assetType: e.target.value })}>
+          {ASSET_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
+        </select>
+        <input required placeholder={suggestion ? `Tag/ID (${suggestion.label})` : "Tag / Identifier"} className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
+          value={form.identifier} onChange={(e) => setForm({ ...form, identifier: e.target.value })} />
+        <input required type="date" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.acquisitionDate} onChange={(e) => setForm({ ...form, acquisitionDate: e.target.value })} />
+        <input type="number" min="0" step="0.01" placeholder="Value (KES, optional)" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.acquisitionValue} onChange={(e) => setForm({ ...form, acquisitionValue: e.target.value })} />
+        <input placeholder="Description (breed, model, unit details — optional)" className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-4"
+          value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white md:col-span-2">
+          Record Asset
+        </button>
+      </form>
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white p-3">
+        <span className="text-xs font-medium text-gray-500">Export statement for:</span>
+        <select className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+          value={statementMemberId} onChange={(e) => setStatementMemberId(e.target.value)}>
+          <option value="">Select member…</option>
+          {(coop.members || []).map((m) => <option key={m.id} value={m.id}>{m.legalName}</option>)}
+        </select>
+        <button onClick={downloadStatement} disabled={!statementMemberId}
+          className="rounded-md border border-kenya-green px-3 py-1 text-xs font-medium text-kenya-green disabled:opacity-40">
+          Download CSV
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+            <tr>
+              <th className="px-4 py-2">Member</th>
+              <th className="px-4 py-2">Type</th>
+              <th className="px-4 py-2">ID / Tag</th>
+              <th className="px-4 py-2">Acquired</th>
+              <th className="px-4 py-2">Value</th>
+              <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {assets.map((a) => (
+              <Fragment key={a.id}>
+                <tr className="border-t border-gray-100">
+                  <td className="px-4 py-2 font-medium">{a.member?.legalName}</td>
+                  <td className="px-4 py-2">{a.assetType.replace(/_/g, " ")}</td>
+                  <td className="px-4 py-2">{a.identifier}</td>
+                  <td className="px-4 py-2">{new Date(a.acquisitionDate).toLocaleDateString()}</td>
+                  <td className="px-4 py-2">{a.currentValue || a.acquisitionValue ? `KES ${Number(a.currentValue || a.acquisitionValue).toLocaleString()}` : "—"}</td>
+                  <td className="px-4 py-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${a.status === "ACTIVE" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}>
+                      {ASSET_STATUS_LABELS[a.status] || a.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2">
+                    <button onClick={() => setExpandedAssetId(expandedAssetId === a.id ? null : a.id)} className="text-xs font-medium text-kenya-green hover:underline">
+                      {expandedAssetId === a.id ? "Cancel" : "Log Event"}
+                    </button>
+                  </td>
+                </tr>
+                {expandedAssetId === a.id && (
+                  <tr className="border-t border-gray-100 bg-gray-50">
+                    <td colSpan={7} className="px-4 py-3">
+                      <div className="flex flex-wrap items-end gap-2">
+                        <select className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+                          value={eventForm.eventType} onChange={(e) => setEventForm({ ...eventForm, eventType: e.target.value })}>
+                          {ASSET_EVENT_TYPES.filter((t) => t !== "ACQUIRED").map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
+                        </select>
+                        <input type="date" className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+                          value={eventForm.eventDate} onChange={(e) => setEventForm({ ...eventForm, eventDate: e.target.value })} />
+                        <input type="number" min="0" step="0.01" placeholder="Value (optional)" className="w-32 rounded-md border border-gray-300 px-2 py-1 text-xs"
+                          value={eventForm.valueAtEvent} onChange={(e) => setEventForm({ ...eventForm, valueAtEvent: e.target.value })} />
+                        <input placeholder="Notes (optional)" className="flex-1 rounded-md border border-gray-300 px-2 py-1 text-xs"
+                          value={eventForm.notes} onChange={(e) => setEventForm({ ...eventForm, notes: e.target.value })} />
+                        <button onClick={() => recordEvent(a.id)} className="rounded-md bg-kenya-green px-3 py-1 text-xs font-semibold text-white">
+                          Save Event
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+            {assets.length === 0 && (
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400">No assets recorded yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 const PAYOUT_TYPES = ["PRODUCE_PAYMENT", "DIVIDEND", "BONUS", "OTHER"];
 const PAYOUT_METHODS = ["MPESA", "CASH", "BANK_TRANSFER", "OTHER"];
 
@@ -838,6 +1053,7 @@ const FACTOR_LABELS = {
   documentCompliance: "Document Compliance",
   membershipStability: "Membership Stability",
   shareCapitalTrajectory: "Share Capital Trajectory",
+  assetStability: "Asset Stability",
 };
 
 function CreditScoreTab({ coop }) {
@@ -909,14 +1125,22 @@ function CreditScoreTab({ coop }) {
               <div key={key}>
                 <div className="mb-1 flex justify-between text-xs">
                   <span className="font-medium text-gray-700">{FACTOR_LABELS[key] || key}</span>
-                  <span className="text-gray-500">{factor.score} / 100 · weight {Math.round((latest.breakdown.weights?.[key] || 0) * 100)}%</span>
+                  {factor.applicable === false ? (
+                    <span className="italic text-gray-400">Not applicable — {coop.valueChain} has no tracked asset</span>
+                  ) : (
+                    <span className="text-gray-500">{factor.score} / 100 · weight {Math.round((latest.breakdown.weights?.[key] || 0) * 100)}%</span>
+                  )}
                 </div>
-                <div className="h-2 w-full rounded-full bg-gray-100">
-                  <div
-                    className="h-2 rounded-full bg-kenya-green"
-                    style={{ width: `${factor.score}%` }}
-                  />
-                </div>
+                {factor.applicable === false ? (
+                  <div className="h-2 w-full rounded-full bg-gray-50" />
+                ) : (
+                  <div className="h-2 w-full rounded-full bg-gray-100">
+                    <div
+                      className="h-2 rounded-full bg-kenya-green"
+                      style={{ width: `${factor.score}%` }}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>

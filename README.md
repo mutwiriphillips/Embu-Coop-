@@ -42,6 +42,10 @@ always filtered to their own county's data regardless of what the client sends.
    account) at `/member`. Registration is verified by matching a submitted National ID
    against the cooperative's own `Member` records — see the Module 7 section below for
    the honest scope boundary on what "verified" means here.
+8. **Asset & Livestock Generalization** — one `Asset` model covers Livestock, Poultry,
+   Housing, and Transport SACCO vehicles: a dairy cow, a boda boda, and a housing unit
+   are all "something a member owns, with a status and a lifecycle of events." Feeds a
+   7th, conditional credit-scoring factor.
 
 ## Project Structure
 
@@ -241,6 +245,60 @@ data everywhere via `requirePermission`'s bypass, but could not review
 documents, approve documents, override governance compliance, or decide
 leave/visit requests, despite the role's intended cross-county oversight.
 
+## Asset & Livestock Generalization (Module 8)
+
+One model — `Asset` — covers every value chain where a member's holding is a
+discrete tracked thing rather than consumable produce: **Livestock, Poultry,
+Housing, and Transport** SACCOs. A dairy cow, a boda boda, and a housing
+unit are structurally the same fact pattern: something a member owns, with a
+status (`ACTIVE`/`TRANSFERRED`/`SOLD`/`DECEASED`/`WRITTEN_OFF`) and a full
+lifecycle event history (`AssetEvent`: acquired, transferred, sold, deceased,
+written off, a valuation update, or a routine health check). This is the same
+"shape, not chain" reduction already applied to `ProduceDelivery` for the 9
+consumable-produce chains — see `learnings-and-workflow` for the original
+3-shape breakdown this completes.
+
+Recording a closing lifecycle event (sold/deceased/transferred/written-off)
+automatically updates the asset's own `status` — "how many assets are
+actually active right now" never depends on staff remembering to flip a
+separate field. A `VALUATION_UPDATE` event refreshes `currentValue`.
+Acquisition itself is logged as the first `AssetEvent` automatically, so
+every asset's history is complete from day one, not just from whenever
+someone got around to it.
+
+**Staff-recorded, not self-reported** — same integrity reasoning as Produce:
+a member can view their own assets and full event history at
+`/api/member/assets`, but cannot create or modify them. Only a Cooperative
+Manager or Field Officer for that specific cooperative can.
+
+**Credit scoring integration — conditional, not universal.** Asset Stability
+is a 7th scoring factor (12% weight) built from three signals: coverage
+(what fraction of members have an active asset on record), survival (active
+assets as a share of every asset ever recorded — high attrition is a real
+risk signal), and recency (what fraction of active assets have any event
+logged in the trailing 12 months). It only applies to the four asset-tracked
+value chains — for every other cooperative, the factor is **absent from the
+weights entirely**, not scored as zero, with the remaining six weights
+proportionally renormalized to still sum to exactly 1.0. The breakdown
+always carries an explicit `applicable: false` entry rather than silently
+omitting the factor, so a lender reading the report can see the boundary,
+not just its absence.
+
+This was verified two ways: 47 unit tests (11 new for this module, in
+`backend/src/utils/creditScore.test.js`) prove the renormalization math is
+exactly correct, including that a coffee cooperative and an identical-data
+livestock cooperative with no herd score identically on every *shared*
+factor — applicability never leaks into the other six factors' own scores.
+Separately, the same targeted-stub access-control method described above
+was re-run specifically against the new `/assets` routes, confirming
+same-county pass-through, cross-county 403, and nonexistent-ID 404 all hold
+for this module too.
+
+An exportable per-member **asset statement** (`GET
+/cooperatives/:id/assets/statement?memberId=`) lists every asset and its
+full event history with a running current-value total — the same kind of
+document a farmer or their cooperative would hand to a lender alongside the
+credit-readiness report itself.
 
 ## Open Items From Scope (to confirm with County before Phase 2)
 

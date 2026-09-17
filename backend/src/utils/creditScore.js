@@ -7,36 +7,53 @@
  * micro-lender (Equity, Co-op Bank, KWFT, AFC, etc). The lending decision,
  * underwriting, and disbursement remain entirely with that third party.
  *
- * The composite score (0-100) is a weighted blend of five factors, each
+ * The composite score (0-100) is a weighted blend of factors, each
  * independently computed and returned in the breakdown so a lender can see
  * exactly what drove the number — nothing is a black box.
  *
- *   1. Contribution consistency  (20%) — how regularly members pay in
- *   2. Produce consistency       (20%) — how regularly/reliably members deliver produce
- *   3. Governance compliance     (20%) — 1/3 rule + committee term status
- *   4. Document compliance       (15%) — required legal filings, approved
- *   5. Membership stability      (15%) — tenure and growth, not just size
- *   6. Share capital trajectory  (10%) — is capital growing or eroding
+ *   1. Contribution consistency  (18%) — how regularly members pay in
+ *   2. Produce consistency       (18%) — how regularly/reliably members deliver produce
+ *   3. Governance compliance     (17%) — 1/3 rule + committee term status
+ *   4. Document compliance       (13%) — required legal filings, approved
+ *   5. Membership stability      (13%) — tenure and growth, not just size
+ *   6. Share capital trajectory  (9%)  — is capital growing or eroding
+ *   7. Asset stability           (12%) — herd/fleet/property record health,
+ *      LIVESTOCK / POULTRY / HOUSING / TRANSPORT cooperatives only
  *
  * Weights are deliberately conservative toward governance and compliance
  * over raw financial size — a small, well-governed cooperative should score
  * better than a large, non-compliant one. This mirrors how real credit
  * assessors weight institutional risk for group lending. Produce and
- * contribution consistency are weighted equally (20% each) since for an
- * agricultural cooperative, what members actually deliver is as strong a
- * productivity signal as what they pay in — a cooperative can have healthy
- * cash contributions but declining farmer output, or vice versa, and a
- * lender should see both independently.
+ * contribution consistency are weighted equally since for an agricultural
+ * cooperative, what members actually deliver is as strong a productivity
+ * signal as what they pay in.
+ *
+ * Asset stability is conditional, not universal: it only applies to the four
+ * value chains where members hold a discrete tracked asset (a dairy cow, a
+ * boda boda, a housing unit). For every other cooperative, this factor is
+ * absent from the breakdown entirely — not scored as zero, not silently
+ * dropped — and its weight is proportionally redistributed across the other
+ * six so they still sum to exactly 1.0. A coffee cooperative is never
+ * penalized for not owning a herd; a livestock cooperative that never
+ * records events is scored on the same principle as an agricultural
+ * cooperative with no produce data: the factor exists, and it's low, because
+ * there's nothing to show.
  */
 
 const WEIGHTS = {
-  contributionConsistency: 0.20,
-  produceConsistency: 0.20,
-  governanceCompliance: 0.20,
-  documentCompliance: 0.15,
-  membershipStability: 0.15,
-  shareCapitalTrajectory: 0.10,
+  contributionConsistency: 0.18,
+  produceConsistency: 0.18,
+  governanceCompliance: 0.17,
+  documentCompliance: 0.13,
+  membershipStability: 0.13,
+  shareCapitalTrajectory: 0.09,
+  assetStability: 0.12,
 };
+
+// Value chains where a member's holdings are a discrete tracked asset
+// (Asset/AssetEvent models) rather than consumable produce. Kept here, next
+// to WEIGHTS, since the two are the only things that decide applicability.
+const ASSET_TRACKED_VALUE_CHAINS = ["LIVESTOCK", "POULTRY", "HOUSING", "TRANSPORT"];
 
 const BANDS = [
   { min: 85, band: "AA", label: "Excellent — strong candidate for lender referral" },
@@ -307,16 +324,86 @@ function scoreShareCapitalTrajectory(contributions, now = new Date()) {
 }
 
 /**
- * Combines all five factors into the composite score + band + full
- * breakdown for transparency.
+ * Factor 7: Asset stability — the livestock/fleet/property counterpart to
+ * membership stability and produce consistency, for the four value chains
+ * where a member's holding is a discrete tracked asset rather than
+ * consumable produce. Three signals, each independently legible to a
+ * lender:
+ *
+ *   - Coverage: what fraction of members have at least one ACTIVE asset on
+ *     record — a herd nobody has bothered to register isn't collateral.
+ *   - Survival: ACTIVE assets as a share of every asset ever recorded — high
+ *     attrition (deceased/written-off/sold) relative to what's still active
+ *     is a real risk signal, not just bookkeeping noise.
+ *   - Recency: what fraction of active assets have ANY event (health check,
+ *     valuation, or otherwise) logged in the trailing 12 months — an asset
+ *     nobody has looked at in over a year is functionally unverified.
+ *
+ * Only ever called when the cooperative's value chain is in
+ * ASSET_TRACKED_VALUE_CHAINS; computeCreditAssessment decides that, not this
+ * function, so this stays a pure function of whatever data it's given.
+ *
+ * @param {Array<{memberId: string, status: string, createdAt: Date|string}>} assets
+ * @param {Array<{assetId: string, eventDate: Date|string}>} assetEvents
+ * @param {number} memberCount
+ * @param {Date} now
  */
-function computeCreditAssessment({ contributions, produceDeliveries, committees, documents, members }, now = new Date()) {
+function scoreAssetStability(assets, assetEvents, memberCount, now = new Date()) {
+  if (memberCount === 0) {
+    return { score: 0, note: "No members recorded.", totalAssets: 0 };
+  }
+  if (assets.length === 0) {
+    return { score: 0, totalAssets: 0, activeAssets: 0, note: "No assets recorded for this value chain yet." };
+  }
+
+  const activeAssets = assets.filter((a) => a.status === "ACTIVE");
+  const membersWithActiveAsset = new Set(activeAssets.map((a) => a.memberId));
+  const coverageRatio = clamp(membersWithActiveAsset.size / memberCount, 0, 1);
+  const survivalRatio = clamp(activeAssets.length / assets.length, 0, 1);
+
+  const twelveMonthsAgo = new Date(now);
+  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+  const recentlyEventedAssetIds = new Set(
+    (assetEvents || [])
+      .filter((e) => new Date(e.eventDate) >= twelveMonthsAgo)
+      .map((e) => e.assetId)
+  );
+  const recencyRatio = activeAssets.length
+    ? clamp(activeAssets.filter((a) => recentlyEventedAssetIds.has(a.id)).length / activeAssets.length, 0, 1)
+    : 0;
+
+  const score = clamp(Math.round((coverageRatio * 0.4 + survivalRatio * 0.35 + recencyRatio * 0.25) * 100));
+
+  return {
+    score,
+    totalAssets: assets.length,
+    activeAssets: activeAssets.length,
+    coverageRatio: Number(coverageRatio.toFixed(2)),
+    survivalRatio: Number(survivalRatio.toFixed(2)),
+    recencyRatio: Number(recencyRatio.toFixed(2)),
+  };
+}
+
+/**
+ * Combines every applicable factor into the composite score + band + full
+ * breakdown for transparency. Asset stability is included only when
+ * valueChain is one of ASSET_TRACKED_VALUE_CHAINS; otherwise its weight is
+ * proportionally redistributed across the other six so they still sum to
+ * exactly 1.0, and the breakdown carries an explicit not-applicable entry
+ * rather than silently omitting it.
+ */
+function computeCreditAssessment({ contributions, produceDeliveries, committees, documents, members, assets, assetEvents, valueChain }, now = new Date()) {
   const contributionConsistency = scoreContributionConsistency(contributions, members.length, now);
   const produceConsistency = scoreProduceConsistency(produceDeliveries || [], members.length, now);
   const governanceCompliance = scoreGovernanceCompliance(committees);
   const documentCompliance = scoreDocumentCompliance(documents);
   const membershipStability = scoreMembershipStability(members, now);
   const shareCapitalTrajectory = scoreShareCapitalTrajectory(contributions, now);
+
+  const assetTrackingApplies = ASSET_TRACKED_VALUE_CHAINS.includes(valueChain);
+  const assetStability = assetTrackingApplies
+    ? { applicable: true, ...scoreAssetStability(assets || [], assetEvents || [], members.length, now) }
+    : { applicable: false, score: null, note: `Not applicable — ${valueChain || "this value chain"} does not track a discrete asset.` };
 
   const factors = {
     contributionConsistency,
@@ -325,11 +412,23 @@ function computeCreditAssessment({ contributions, produceDeliveries, committees,
     documentCompliance,
     membershipStability,
     shareCapitalTrajectory,
+    assetStability,
   };
+
+  // Effective weights: drop assetStability when it doesn't apply and scale
+  // the rest back up so they still sum to 1.0. When it does apply, the
+  // stated WEIGHTS are used exactly as declared.
+  const effectiveWeights = assetTrackingApplies
+    ? { ...WEIGHTS }
+    : Object.fromEntries(
+        Object.entries(WEIGHTS)
+          .filter(([key]) => key !== "assetStability")
+          .map(([key, weight]) => [key, weight / (1 - WEIGHTS.assetStability)])
+      );
 
   const composite = clamp(
     Math.round(
-      Object.entries(WEIGHTS).reduce((sum, [key, weight]) => sum + factors[key].score * weight, 0)
+      Object.entries(effectiveWeights).reduce((sum, [key, weight]) => sum + factors[key].score * weight, 0)
     )
   );
 
@@ -339,7 +438,7 @@ function computeCreditAssessment({ contributions, produceDeliveries, committees,
     score: composite,
     band: bandInfo.band,
     bandLabel: bandInfo.label,
-    weights: WEIGHTS,
+    weights: effectiveWeights,
     factors,
     computedAt: now.toISOString(),
     disclaimer:
@@ -350,6 +449,7 @@ function computeCreditAssessment({ contributions, produceDeliveries, committees,
 module.exports = {
   WEIGHTS,
   BANDS,
+  ASSET_TRACKED_VALUE_CHAINS,
   bandFor,
   scoreContributionConsistency,
   scoreProduceConsistency,
@@ -357,5 +457,6 @@ module.exports = {
   scoreDocumentCompliance,
   scoreMembershipStability,
   scoreShareCapitalTrajectory,
+  scoreAssetStability,
   computeCreditAssessment,
 };

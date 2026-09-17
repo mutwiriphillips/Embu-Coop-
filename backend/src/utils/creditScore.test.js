@@ -7,6 +7,7 @@
 const assert = require("assert");
 const {
   WEIGHTS,
+  ASSET_TRACKED_VALUE_CHAINS,
   bandFor,
   scoreContributionConsistency,
   scoreProduceConsistency,
@@ -14,6 +15,7 @@ const {
   scoreDocumentCompliance,
   scoreMembershipStability,
   scoreShareCapitalTrajectory,
+  scoreAssetStability,
   computeCreditAssessment,
 } = require("./creditScore");
 
@@ -40,6 +42,12 @@ console.log("WEIGHTS");
 test("weights sum to exactly 1.0", () => {
   const total = Object.values(WEIGHTS).reduce((a, b) => a + b, 0);
   assert.ok(Math.abs(total - 1.0) < 1e-9, `weights summed to ${total}, expected 1.0`);
+});
+test("ASSET_TRACKED_VALUE_CHAINS names exactly the four asset-shaped chains", () => {
+  assert.deepStrictEqual(
+    [...ASSET_TRACKED_VALUE_CHAINS].sort(),
+    ["HOUSING", "LIVESTOCK", "POULTRY", "TRANSPORT"].sort()
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -238,6 +246,65 @@ test("decline from prior to recent period scores below flat baseline (60)", () =
 });
 
 // ---------------------------------------------------------------------------
+console.log("\nscoreAssetStability()");
+test("zero members yields score 0, no crash", () => {
+  const r = scoreAssetStability([], [], 0, NOW);
+  assert.strictEqual(r.score, 0);
+});
+test("no assets recorded yields score 0", () => {
+  const r = scoreAssetStability([], [], 10, NOW);
+  assert.strictEqual(r.score, 0);
+});
+test("full coverage, full survival, all recently evented scores near 100", () => {
+  const assets = [
+    { id: "a1", memberId: "m1", status: "ACTIVE" },
+    { id: "a2", memberId: "m2", status: "ACTIVE" },
+    { id: "a3", memberId: "m3", status: "ACTIVE" },
+  ];
+  const events = [
+    { assetId: "a1", eventDate: NOW },
+    { assetId: "a2", eventDate: NOW },
+    { assetId: "a3", eventDate: NOW },
+  ];
+  const r = scoreAssetStability(assets, events, 3, NOW);
+  assert.strictEqual(r.score, 100, `expected 100, got ${r.score}`);
+});
+test("high attrition (mostly deceased/written-off) scores low even with full coverage history", () => {
+  const assets = [
+    { id: "a1", memberId: "m1", status: "ACTIVE" },
+    { id: "a2", memberId: "m1", status: "DECEASED" },
+    { id: "a3", memberId: "m1", status: "DECEASED" },
+    { id: "a4", memberId: "m1", status: "WRITTEN_OFF" },
+  ];
+  const r = scoreAssetStability(assets, [], 1, NOW);
+  assert.ok(r.score < 50, `expected low score from high attrition, got ${r.score}`);
+  assert.strictEqual(r.survivalRatio, 0.25);
+});
+test("assets with no recent events score lower than identical assets with recent events", () => {
+  const assets = [{ id: "a1", memberId: "m1", status: "ACTIVE" }];
+  const staleEvent = new Date(NOW);
+  staleEvent.setFullYear(staleEvent.getFullYear() - 3);
+  const withRecent = scoreAssetStability(assets, [{ assetId: "a1", eventDate: NOW }], 1, NOW);
+  const withStale = scoreAssetStability(assets, [{ assetId: "a1", eventDate: staleEvent }], 1, NOW);
+  assert.ok(withRecent.score > withStale.score, `expected recent-event score to beat stale-event score`);
+});
+test("coverage matters independently of survival — half the members with active assets scores below full coverage", () => {
+  const fullCoverage = scoreAssetStability(
+    [{ id: "a1", memberId: "m1", status: "ACTIVE" }, { id: "a2", memberId: "m2", status: "ACTIVE" }],
+    [],
+    2,
+    NOW
+  );
+  const halfCoverage = scoreAssetStability(
+    [{ id: "a1", memberId: "m1", status: "ACTIVE" }],
+    [],
+    2,
+    NOW
+  );
+  assert.ok(halfCoverage.score < fullCoverage.score, "half coverage should score below full coverage");
+});
+
+// ---------------------------------------------------------------------------
 console.log("\ncomputeCreditAssessment() — end-to-end scenarios");
 
 test("a strong cooperative (all factors healthy) lands in band AA or A", () => {
@@ -287,17 +354,66 @@ test("a weak cooperative (no data, expired committee) lands in band D", () => {
   assert.strictEqual(result.band, "D", `expected D, got ${result.band} (score ${result.score})`);
 });
 
-test("breakdown always includes all six factors with their own scores", () => {
-  const result = computeCreditAssessment({ contributions: [], produceDeliveries: [], committees: [], documents: [], members: [] }, NOW);
+test("breakdown always includes all seven factor keys, even when asset stability is not applicable", () => {
+  const result = computeCreditAssessment({ contributions: [], produceDeliveries: [], committees: [], documents: [], members: [], valueChain: "COFFEE" }, NOW);
   const keys = Object.keys(result.factors);
   assert.deepStrictEqual(
     keys.sort(),
-    ["contributionConsistency", "produceConsistency", "documentCompliance", "governanceCompliance", "membershipStability", "shareCapitalTrajectory"].sort()
+    ["contributionConsistency", "produceConsistency", "documentCompliance", "governanceCompliance", "membershipStability", "shareCapitalTrajectory", "assetStability"].sort()
+  );
+  assert.strictEqual(result.factors.assetStability.applicable, false);
+  assert.strictEqual(result.factors.assetStability.score, null);
+});
+
+test("for a non-asset-tracked value chain, effective weights exclude assetStability and still sum to 1.0", () => {
+  const result = computeCreditAssessment({ contributions: [], produceDeliveries: [], committees: [], documents: [], members: [], valueChain: "COFFEE" }, NOW);
+  assert.ok(!("assetStability" in result.weights), "assetStability should be absent from effective weights");
+  const total = Object.values(result.weights).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(total - 1.0) < 1e-9, `effective weights summed to ${total}, expected 1.0`);
+});
+
+test("for an asset-tracked value chain (LIVESTOCK), assetStability is applicable and included in weights", () => {
+  const result = computeCreditAssessment(
+    { contributions: [], produceDeliveries: [], committees: [], documents: [], members: [{ createdAt: NOW, id: "m1" }], assets: [], assetEvents: [], valueChain: "LIVESTOCK" },
+    NOW
+  );
+  assert.strictEqual(result.factors.assetStability.applicable, true);
+  assert.ok("assetStability" in result.weights);
+  const total = Object.values(result.weights).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(total - 1.0) < 1e-9, `weights summed to ${total}, expected 1.0`);
+});
+
+test("a healthy LIVESTOCK cooperative with a well-managed herd scores meaningfully higher than one with no asset records", () => {
+  const members = Array.from({ length: 5 }, (_, i) => ({ createdAt: NOW, id: `m${i}` }));
+  const goodAssets = members.map((m, i) => ({ id: `a${i}`, memberId: m.id, status: "ACTIVE" }));
+  const goodEvents = goodAssets.map((a) => ({ assetId: a.id, eventDate: NOW }));
+
+  const withHerd = computeCreditAssessment(
+    { contributions: [], produceDeliveries: [], committees: [], documents: [], members, assets: goodAssets, assetEvents: goodEvents, valueChain: "LIVESTOCK" },
+    NOW
+  );
+  const withoutHerd = computeCreditAssessment(
+    { contributions: [], produceDeliveries: [], committees: [], documents: [], members, assets: [], assetEvents: [], valueChain: "LIVESTOCK" },
+    NOW
+  );
+  assert.ok(
+    withHerd.score > withoutHerd.score,
+    `expected a well-managed herd to raise the score: with=${withHerd.score} without=${withoutHerd.score}`
   );
 });
 
+test("a coffee cooperative and an identical-data livestock cooperative with no herd score the same on every shared factor", () => {
+  // Sanity check that applicability doesn't leak into the other six factors'
+  // own scores — only into which weights apply.
+  const coffee = computeCreditAssessment({ contributions: [], produceDeliveries: [], committees: [], documents: [], members: [], valueChain: "COFFEE" }, NOW);
+  const livestockNoHerd = computeCreditAssessment({ contributions: [], produceDeliveries: [], committees: [], documents: [], members: [], assets: [], assetEvents: [], valueChain: "LIVESTOCK" }, NOW);
+  for (const key of ["contributionConsistency", "produceConsistency", "governanceCompliance", "documentCompliance", "membershipStability", "shareCapitalTrajectory"]) {
+    assert.strictEqual(coffee.factors[key].score, livestockNoHerd.factors[key].score, `factor ${key} should be identical`);
+  }
+});
+
 test("disclaimer is always present (this platform never presents itself as a lender)", () => {
-  const result = computeCreditAssessment({ contributions: [], produceDeliveries: [], committees: [], documents: [], members: [] }, NOW);
+  const result = computeCreditAssessment({ contributions: [], produceDeliveries: [], committees: [], documents: [], members: [], valueChain: "COFFEE" }, NOW);
   assert.ok(result.disclaimer.includes("does not disburse funds"));
 });
 
