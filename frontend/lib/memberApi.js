@@ -1,11 +1,12 @@
 import axios from "axios";
+import { resolveApiBaseUrl } from "./apiBaseUrl";
 
 // Deliberately separate from lib/api.js: member tokens are stored under a
 // different localStorage key and are never sent on staff API calls (and
 // vice versa) — mirrors the backend's separate authenticate/authenticateMember
 // middleware and separate JWT "type" claims.
 const memberApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api",
+  baseURL: resolveApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
 });
 
 memberApi.interceptors.request.use((config) => {

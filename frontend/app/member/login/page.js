@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useMemberAuth } from "../../../context/MemberAuthContext";
+import { describeAuthError } from "../../../lib/authErrors";
 
 export default function MemberLoginPage() {
   const { login } = useMemberAuth();
@@ -17,7 +18,7 @@ export default function MemberLoginPage() {
     try {
       await login(nationalId, password);
     } catch (err) {
-      setError(err?.response?.data?.error || "Login failed. Check your National ID and password.");
+      setError(describeAuthError(err, "Login failed. Check your National ID and password."));
     } finally {
       setSubmitting(false);
     }

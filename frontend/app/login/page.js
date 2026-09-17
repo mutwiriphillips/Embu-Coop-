@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { describeAuthError } from "../../lib/authErrors";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -17,7 +18,7 @@ export default function LoginPage() {
     try {
       await login(email, password);
     } catch (err) {
-      setError(err?.response?.data?.error || "Login failed. Check your credentials.");
+      setError(describeAuthError(err, "Login failed. Check your credentials."));
     } finally {
       setSubmitting(false);
     }
