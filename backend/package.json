@@ -12,6 +12,8 @@
     "seed": "node prisma/seed.js",
     "seed:counties": "node prisma/seed-counties.js",
     "seed:pilot": "node prisma/seed-pilot.js",
+    "reset:all": "npx prisma db push --force-reset --accept-data-loss && npm run seed:counties && npm run seed:pilot",
+    "verify:seed": "node prisma/verify-seed.js",
     "test:credit-score": "node src/utils/creditScore.test.js"
   },
   "prisma": {
