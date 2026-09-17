@@ -89,11 +89,16 @@ cd backend
 cp .env.example .env      # fill in DATABASE_URL, JWT_SECRET
 npm install
 npx prisma generate
-npx prisma db push        # creates tables from schema.prisma (see note in RENDER_DEPLOYMENT.md)
-npm run seed:counties     # seeds all 47 counties — required before anything else
-npm run seed:pilot        # seeds 1 National Admin, 1 County Director (Embu), 1 employee, 1 manager, 1 cooperative
+npm run reset:all          # db push + seed counties + seed pilot accounts, in one step
 npm run dev                # http://localhost:4000
 ```
+
+Whenever `prisma/schema.prisma` changes, re-run `npm run reset:all` — it
+recreates the tables from scratch and reseeds both the counties and the
+pilot accounts together, so login can never silently fail just because a
+schema change wiped the database and the seed step got missed. If a login
+ever stops working, `npm run verify:seed` queries the database directly and
+reports exactly which accounts do or don't exist, rather than guessing.
 
 ### 3. Frontend
 
