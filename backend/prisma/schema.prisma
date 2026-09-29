@@ -23,6 +23,7 @@ model County {
 
   staff        User[]
   cooperatives Cooperative[]
+  agrovetShops AgrovetShop[]
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +74,10 @@ model User {
   recordedPayouts       Payout[]           @relation("PayoutRecordedBy")
   recordedAssets        Asset[]            @relation("AssetRecordedBy")
   recordedAssetEvents   AssetEvent[]       @relation("AssetEventRecordedBy")
+  reviewedAgrovets      AgrovetShop[]      @relation("AgrovetReviewer")
+  approvedAgrovets      AgrovetShop[]      @relation("AgrovetApprover")
+  creditsAllocated      FarmerInputCredit[] @relation("CreditAllocatedBy")
+  reimbursementsProcessed AgrovetReimbursement[] @relation("ReimbursementProcessedBy")
 
   @@index([countyId])
 }
@@ -225,6 +230,8 @@ model Member {
   payouts        Payout[]
   account        MemberAccount?
   assets         Asset[]
+  inputCredits   FarmerInputCredit[]
+  inputCollections InputCollection[]
 
   @@unique([cooperativeId, nationalId])
 }
@@ -613,6 +620,226 @@ model AGM {
   noticeStorageKey  String?  // Letter Calling for the AGM
   minutesStorageKey String?  // Signed minutes
   createdAt      DateTime    @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 9: Agrovet Input Supply & Government Reimbursement Pipeline
+// ---------------------------------------------------------------------------
+// A THIRD, fully isolated auth tier — agrovet shop owners are neither staff
+// nor members, so they get their own JWT "type" claim and their own account
+// model, exactly like Member vs MemberAccount below did for farmers. The
+// money flow deliberately mirrors ProduceDelivery -> Payout: a farmer's
+// government-sourced input credit is drawn down by InputCollection records
+// (goods physically handed over, at the point of sale, by the shop itself)
+// and later settled in a batch AgrovetReimbursement — the shop is paid for
+// what it already gave the farmer, never in advance of it, and the money
+// only ever reaches the shop, never the farmer directly, since the farmer
+// already received the value as goods.
+
+enum AgrovetApprovalStatus {
+  PENDING
+  REVIEWED
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+model AgrovetShop {
+  id                String                @id @default(uuid())
+  name              String
+  ownerName         String
+  phoneNumber       String
+  email             String?
+  physicalAddress   String                // free text: shop/market location detail
+  countyId          String
+  county            County                @relation(fields: [countyId], references: [id])
+  subCounty         String?
+  status            AgrovetApprovalStatus @default(PENDING)
+  reviewedById      String?
+  reviewedBy        User?                 @relation("AgrovetReviewer", fields: [reviewedById], references: [id])
+  reviewedAt        DateTime?
+  approvedById      String?
+  approvedBy        User?                 @relation("AgrovetApprover", fields: [approvedById], references: [id])
+  approvedAt        DateTime?
+  rejectionNote     String?
+  // Where reimbursement is actually sent — deliberately separate from the
+  // owner's own login phone number, since the two can differ (e.g. a
+  // business till number vs a personal line).
+  reimbursementMsisdn String?             // M-Pesa till/paybill or phone for reimbursement
+  bankAccountDetails  String?             // optional alternative payment rail
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  account           AgrovetAccount?
+  products          InputProduct[]
+  collections       InputCollection[]
+  reimbursements    AgrovetReimbursement[]
+
+  @@index([countyId, status])
+}
+
+// Mirrors MemberAccount exactly: a separate credential store from both
+// staff (User) and farmers (MemberAccount), verified with its own JWT
+// "type" claim so a shop login can never reach staff or farmer endpoints,
+// and vice versa.
+model AgrovetAccount {
+  id            String      @id @default(uuid())
+  agrovetShopId String      @unique
+  agrovetShop   AgrovetShop @relation(fields: [agrovetShopId], references: [id], onDelete: Cascade)
+  // Denormalized from the owner's national ID at registration, same
+  // reasoning as MemberAccount.nationalId — a single unique lookup at login.
+  nationalId    String      @unique
+  phoneNumber   String
+  email         String?
+  passwordHash  String
+  active        Boolean     @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime    @default(now())
+
+  collectionsRecorded InputCollection[]
+}
+
+enum InputCategory {
+  SEEDS
+  FERTILIZER
+  MANURE
+  PESTICIDE
+  EQUIPMENT
+  TOOLS
+  OTHER
+}
+
+enum InputUnit {
+  KG
+  BAG
+  LITRE
+  PIECE
+  OTHER
+}
+
+// A shop's own catalog — what it actually stocks and at what price. Only
+// items on THIS list can be collected against a farmer's credit at THIS
+// shop, so a shop can never bill for something it never offered.
+model InputProduct {
+  id            String        @id @default(uuid())
+  agrovetShopId String
+  agrovetShop   AgrovetShop   @relation(fields: [agrovetShopId], references: [id], onDelete: Cascade)
+  name          String        // e.g. "DAP Fertilizer 50kg", "Farmyard Manure", "Jembe (hoe)"
+  category      InputCategory
+  unit          InputUnit     @default(OTHER)
+  unitPrice     Decimal       @db.Decimal(12, 2)
+  active        Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  collectionItems InputCollectionItem[]
+
+  @@index([agrovetShopId, active])
+}
+
+enum InputCreditStatus {
+  ACTIVE
+  EXHAUSTED
+  EXPIRED
+  CANCELLED
+}
+
+// The government-sourced balance a farmer is entitled to draw down as farm
+// inputs. "Government" here is deliberately not a fixed enum — real
+// programs are named things like "NARIGP Fertilizer Subsidy 2026" or a
+// county's own Wezesha-style input support round, and new ones appear over
+// time, so this is free text like ProduceDelivery.produceType is.
+model FarmerInputCredit {
+  id               String            @id @default(uuid())
+  memberId         String
+  member           Member            @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  programName      String
+  totalAmount      Decimal           @db.Decimal(14, 2)
+  remainingAmount  Decimal           @db.Decimal(14, 2)
+  status           InputCreditStatus @default(ACTIVE)
+  allocatedById    String
+  allocatedBy      User              @relation("CreditAllocatedBy", fields: [allocatedById], references: [id])
+  allocatedDate    DateTime
+  expiryDate       DateTime?
+  createdAt        DateTime          @default(now())
+
+  collections      InputCollection[]
+
+  @@index([memberId, status])
+}
+
+enum CollectionStatus {
+  PENDING_REIMBURSEMENT
+  REIMBURSED
+  DISPUTED
+}
+
+// The point-of-sale event: a farmer physically collected goods at a
+// registered shop, drawn against their own government credit. This is the
+// "ProduceDelivery" of this module — recorded by the shop itself (via its
+// own AgrovetAccount login), never by the farmer or by staff, since the
+// shop is the party with first-hand knowledge that goods actually changed
+// hands.
+model InputCollection {
+  id                  String             @id @default(uuid())
+  farmerInputCreditId String
+  farmerInputCredit   FarmerInputCredit  @relation(fields: [farmerInputCreditId], references: [id], onDelete: Cascade)
+  memberId            String             // denormalized for direct farmer-side queries
+  member              Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  agrovetShopId       String
+  agrovetShop         AgrovetShop        @relation(fields: [agrovetShopId], references: [id], onDelete: Cascade)
+  totalValue          Decimal            @db.Decimal(14, 2) // sum of line items, snapshotted
+  collectionDate      DateTime
+  status              CollectionStatus   @default(PENDING_REIMBURSEMENT)
+  reimbursementId     String?
+  reimbursement       AgrovetReimbursement? @relation(fields: [reimbursementId], references: [id])
+  recordedByAgrovetId String
+  recordedByAgrovet   AgrovetAccount     @relation(fields: [recordedByAgrovetId], references: [id])
+  createdAt           DateTime           @default(now())
+
+  items               InputCollectionItem[]
+
+  @@index([memberId, collectionDate])
+  @@index([agrovetShopId, status])
+}
+
+// Line items within one collection — full itemization rather than a single
+// lump sum, so a farmer's or auditor's statement can show exactly what was
+// taken, matching the granularity the rest of this platform holds itself
+// to. Product name and price are snapshotted at collection time so a later
+// catalog edit or retirement never rewrites history.
+model InputCollectionItem {
+  id                  String          @id @default(uuid())
+  inputCollectionId   String
+  inputCollection     InputCollection @relation(fields: [inputCollectionId], references: [id], onDelete: Cascade)
+  inputProductId      String
+  inputProduct        InputProduct    @relation(fields: [inputProductId], references: [id])
+  productNameSnapshot String
+  quantity            Decimal         @db.Decimal(10, 2)
+  unitPriceSnapshot   Decimal         @db.Decimal(12, 2)
+  lineTotal           Decimal         @db.Decimal(14, 2)
+}
+
+// Batch settlement to one shop for goods it has already handed out — the
+// "Payout" of this module. Created once county staff have verified the
+// underlying government credit disbursement is genuine; only then do the
+// pending InputCollection rows for that shop move to REIMBURSED.
+model AgrovetReimbursement {
+  id            String        @id @default(uuid())
+  agrovetShopId String
+  agrovetShop   AgrovetShop   @relation(fields: [agrovetShopId], references: [id], onDelete: Cascade)
+  totalAmount   Decimal       @db.Decimal(14, 2)
+  periodLabel   String?       // e.g. "July 2026"
+  method        PaymentMethod @default(BANK_TRANSFER)
+  externalRef   String?
+  reimbursementDate DateTime
+  processedById String
+  processedBy   User          @relation("ReimbursementProcessedBy", fields: [processedById], references: [id])
+  createdAt     DateTime      @default(now())
+
+  collections   InputCollection[]
+
+  @@index([agrovetShopId, reimbursementDate])
 }
 
 // ---------------------------------------------------------------------------

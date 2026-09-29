@@ -10,6 +10,8 @@ router.get("/contributions", ctrl.listContributions);
 router.post("/contributions/initiate", ctrl.initiateContribution);
 router.get("/produce", ctrl.listProduce);
 router.get("/assets", ctrl.listAssets);
+router.get("/input-credits", ctrl.listInputCredits);
+router.get("/input-collections", ctrl.listInputCollections);
 router.get("/payouts", ctrl.listPayouts);
 router.get("/agms", ctrl.listAgms);
 

@@ -22,6 +22,10 @@ const assetRoutes = require("./routes/assets");
 const reportsRoutes = require("./routes/reports");
 const memberAuthRoutes = require("./routes/memberAuth");
 const memberRoutes = require("./routes/member");
+const inputCreditRoutes = require("./routes/inputCredits");
+const agrovetAuthRoutes = require("./routes/agrovetAuth");
+const agrovetSelfRoutes = require("./routes/agrovetSelf");
+const agrovetRoutes = require("./routes/agrovets");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -54,10 +58,14 @@ app.use("/api/cooperatives/:id/credit-assessment", creditAssessmentRoutes);
 app.use("/api/cooperatives/:id/produce", produceRoutes);
 app.use("/api/cooperatives/:id/payouts", payoutRoutes);
 app.use("/api/cooperatives/:id/assets", assetRoutes);
+app.use("/api/cooperatives/:id/input-credits", inputCreditRoutes);
 app.use("/api/field-ops", fieldOpsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/member-auth", memberAuthRoutes);
 app.use("/api/member", memberRoutes);
+app.use("/api/agrovet-auth", agrovetAuthRoutes);
+app.use("/api/agrovet", agrovetSelfRoutes);
+app.use("/api/agrovets", agrovetRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 app.use(errorHandler);

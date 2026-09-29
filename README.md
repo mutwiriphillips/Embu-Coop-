@@ -46,6 +46,10 @@ always filtered to their own county's data regardless of what the client sends.
    Housing, and Transport SACCO vehicles: a dairy cow, a boda boda, and a housing unit
    are all "something a member owns, with a status and a lifecycle of events." Feeds a
    7th, conditional credit-scoring factor.
+9. **Agrovet Input Supply & Government Reimbursement** — a genuinely THIRD, fully
+   isolated auth tier (`AgrovetAccount`, alongside staff and members) for registered
+   agrovet shops. A farmer draws down a government-sourced input credit as goods at any
+   approved shop; the shop is reimbursed in a batch afterward. See Module 9 below.
 
 ## Project Structure
 
@@ -118,7 +122,11 @@ All pilot accounts share the password `Pilot2026!`:
 ### Pilot / Test Run on Render
 
 See [`RENDER_DEPLOYMENT.md`](./RENDER_DEPLOYMENT.md) for a full guide to
-deploying this on Render with open self-signup enabled for testers.
+deploying this on Render with open self-signup enabled for testers, and
+[`SMOKE_TEST_CHECKLIST.md`](./SMOKE_TEST_CHECKLIST.md) for a structured
+walkthrough to run against the live deployment after every deploy — unit
+tests and local builds prove the code is correct, but nothing exercises the
+real Postgres database and real HTTP round-trips until this checklist does.
 
 ## Governance Logic (Module 5) — implemented rules
 
@@ -304,6 +312,79 @@ An exportable per-member **asset statement** (`GET
 full event history with a running current-value total — the same kind of
 document a farmer or their cooperative would hand to a lender alongside the
 credit-readiness report itself.
+
+## Agrovet Input Supply & Government Reimbursement (Module 9)
+
+A genuinely **third auth tier** — agrovet shop owners are neither staff nor
+farmers, so `AgrovetAccount` gets its own JWT `type: "agrovet"` claim and its
+own `authenticateAgrovet` middleware, structurally isolated from both
+`authenticate` (staff) and `authenticateMember` the same way those two are
+isolated from each other. A shop's login can never reach a staff or farmer
+endpoint, and vice versa — proven with the same crafted-JWT method used
+throughout this project, now three-way instead of two.
+
+**The flow, deliberately modelled on the existing produce-to-payout
+pattern:**
+
+1. **`FarmerInputCredit`** — county staff record that a government
+   programme (named freely, e.g. "NARIGP Fertilizer Subsidy 2026" — not a
+   fixed enum, since real programmes vary and new ones appear over time)
+   has allocated a farmer a specific input credit.
+2. **`InputCollection`** — the point-of-sale event. A farmer visits any
+   *approved* agrovet shop, and the shop itself (via its own portal login,
+   never the farmer, never staff) records what was physically handed over,
+   itemised against its own product catalog (`InputProduct`). This is the
+   "ProduceDelivery" of this module: recorded by the party with first-hand
+   knowledge that goods actually changed hands.
+3. **`AgrovetReimbursement`** — once county staff have verified the
+   underlying government disbursement is genuine, a Director batch-settles
+   a shop's pending collections in one transaction — the "Payout" of this
+   module. Money only ever reaches the shop, never the farmer directly,
+   since the farmer already received the value as goods.
+
+**Shop registration follows the same two-tier approval Document Management
+already uses** — `PENDING` → `REVIEWED` (Sub-County Officer) → `APPROVED`
+(Director) — reusing that pattern rather than inventing a new one. A shop
+can log in and see its own status while still pending; only catalog and
+collection-recording routes are gated behind full approval, via a separate
+`requireApprovedShop()` middleware rather than baking the gate into
+authentication itself.
+
+**Two real bugs were caught and fixed during this module's build, not
+after:**
+
+- `authenticate()` (the original staff middleware) only excluded `"member"`
+  by name rather than positively requiring `"staff"` — an incomplete
+  deny-list that happened to still work by accident (an agrovet token's
+  `sub` simply never matched a real staff `User` id), not because it was
+  actually checked for. Fixed to a positive `payload.type !== "staff"`
+  check, so a new tier's token can never again silently fall through this
+  check by omission the way the old deny-list could.
+- The first draft of collection recording read the credit's remaining
+  balance, checked it in application code, then wrote the decrement as a
+  separate step — a classic race condition where two near-simultaneous
+  collections against the same credit could each pass the check and
+  jointly overdraw it. Rewritten as one atomic conditional `updateMany`
+  (`WHERE remainingAmount >= totalValue`) so the check and the decrement
+  happen in a single database statement; concurrent requests can no longer
+  interleave their way past it.
+
+Verified with live crafted-JWT tests: three-way tier isolation (staff ↔
+member ↔ agrovet, each rejected on the other two's routes), county-scoped
+shop approval (own-county pass-through, cross-county 403, nonexistent
+404), and the staff role hierarchy (a Sub-County Officer can review a shop
+but not approve it or process a reimbursement — confirmed by a `409`
+business-logic response proving they genuinely reached the controller,
+not a `403` that would just as easily mean they were blocked by accident).
+
+**Honest gaps:** no real cooperative has used this module in production —
+it is built and tested, not field-proven, the same standing caveat every
+other module in this project carries at this stage. `prisma validate`
+could not be run for this module's schema changes, since its engine
+binaries live outside this sandbox's network allowlist; verification
+instead relied on a manual, bidirectional pairing check of all 16 new
+relations (every `@relation` has a matching reverse field, on both models
+it connects) plus the live wiring and access-control tests described above.
 
 ## Open Items From Scope (to confirm with County before Phase 2)
 

@@ -6,7 +6,7 @@ import ProtectedRoute from "../../../components/ProtectedRoute";
 import api from "../../../lib/api";
 
 const ASSET_TRACKED_VALUE_CHAINS = ["LIVESTOCK", "POULTRY", "HOUSING", "TRANSPORT"];
-const BASE_TABS = ["Members", "Contributions", "Produce", "Payouts", "Documents", "Governance", "AGM", "Credit Score"];
+const BASE_TABS = ["Members", "Contributions", "Produce", "Input Credits", "Payouts", "Documents", "Governance", "AGM", "Credit Score"];
 
 export default function CooperativeDetailPage() {
   const { id } = useParams();
@@ -68,6 +68,7 @@ export default function CooperativeDetailPage() {
       {tab === "Contributions" && <ContributionsTab coop={coop} />}
       {tab === "Produce" && <ProduceTab coop={coop} />}
       {tab === "Assets" && <AssetsTab coop={coop} />}
+      {tab === "Input Credits" && <InputCreditsTab coop={coop} />}
       {tab === "Payouts" && <PayoutsTab coop={coop} />}
       {tab === "Documents" && <DocumentsTab coop={coop} onChange={reload} />}
       {tab === "Governance" && <GovernanceTab coop={coop} onChange={reload} />}
@@ -874,6 +875,100 @@ function AssetsTab({ coop }) {
             ))}
             {assets.length === 0 && (
               <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400">No assets recorded yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const CREDIT_STATUS_BADGE = {
+  ACTIVE: "bg-green-100 text-green-800",
+  EXHAUSTED: "bg-gray-100 text-gray-600",
+  EXPIRED: "bg-red-100 text-red-800",
+  CANCELLED: "bg-red-100 text-red-800",
+};
+
+function InputCreditsTab({ coop }) {
+  const [credits, setCredits] = useState([]);
+  const [form, setForm] = useState({ memberId: "", programName: "", totalAmount: "", allocatedDate: new Date().toISOString().slice(0, 10), expiryDate: "" });
+  const [error, setError] = useState("");
+
+  function load() {
+    api.get(`/cooperatives/${coop.id}/input-credits`).then((res) => setCredits(res.data)).catch(() => {});
+  }
+  useEffect(load, [coop.id]);
+
+  async function allocate(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await api.post(`/cooperatives/${coop.id}/input-credits`, {
+        ...form,
+        totalAmount: Number(form.totalAmount),
+        expiryDate: form.expiryDate || undefined,
+      });
+      setForm({ ...form, memberId: "", programName: "", totalAmount: "", expiryDate: "" });
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to allocate credit");
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-4 rounded-md bg-kenya-green/5 px-4 py-2 text-xs text-gray-600">
+        Record a government-sourced input credit here (e.g. a fertilizer subsidy round). The farmer
+        draws it down as farm inputs at any approved agrovet shop — recorded on the shop's own
+        portal, never here — and the shop is reimbursed later from the Agrovet Shops page.
+      </div>
+
+      <form onSubmit={allocate} className="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-5">
+        <select required className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
+          value={form.memberId} onChange={(e) => setForm({ ...form, memberId: e.target.value })}>
+          <option value="">Select member…</option>
+          {(coop.members || []).map((m) => <option key={m.id} value={m.id}>{m.legalName}</option>)}
+        </select>
+        <input required placeholder="Programme name (e.g. NARIGP Fertilizer Subsidy)" className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
+          value={form.programName} onChange={(e) => setForm({ ...form, programName: e.target.value })} />
+        <input required type="number" min="0" step="0.01" placeholder="Amount (KES)" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: e.target.value })} />
+        <input required type="date" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.allocatedDate} onChange={(e) => setForm({ ...form, allocatedDate: e.target.value })} />
+        <input type="date" placeholder="Expiry (optional)" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          value={form.expiryDate} onChange={(e) => setForm({ ...form, expiryDate: e.target.value })} />
+        <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white md:col-span-2">
+          Allocate Credit
+        </button>
+      </form>
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+            <tr>
+              <th className="px-4 py-2">Member</th>
+              <th className="px-4 py-2">Programme</th>
+              <th className="px-4 py-2">Allocated</th>
+              <th className="px-4 py-2">Remaining</th>
+              <th className="px-4 py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {credits.map((c) => (
+              <tr key={c.id} className="border-t border-gray-100">
+                <td className="px-4 py-2 font-medium">{c.member?.legalName}</td>
+                <td className="px-4 py-2">{c.programName}</td>
+                <td className="px-4 py-2">KES {Number(c.totalAmount).toLocaleString()}</td>
+                <td className="px-4 py-2">KES {Number(c.remainingAmount).toLocaleString()}</td>
+                <td className="px-4 py-2">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CREDIT_STATUS_BADGE[c.status] || "bg-gray-100"}`}>{c.status}</span>
+                </td>
+              </tr>
+            ))}
+            {credits.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">No input credits allocated yet.</td></tr>
             )}
           </tbody>
         </table>

@@ -53,16 +53,26 @@ deploy:
 
 ## 4. Seed the counties, then the pilot accounts
 
-On `embu-coop-backend` → **Shell** tab, run:
+**Every schema change to this project requires `db push --force-reset`, which
+drops every table — including whatever accounts were already seeded.** If
+you've deployed an update since the last time you seeded (new modules,
+schema changes), the database is empty again and every login will fail with
+"Invalid credentials" for the boring reason that the account doesn't exist
+yet — not because anything is broken. The single command below does the
+reset and both seed steps together, so this can't be forgotten as two
+separate steps again:
 
 ```bash
+npm run reset:all
+```
+
+That's equivalent to running these three in order, which still works if you
+prefer to see each step individually:
+```bash
+npx prisma db push --force-reset --accept-data-loss
 npm run seed:counties
 npm run seed:pilot
 ```
-
-(`seed:pilot` also auto-runs the counties seed if it detects an empty
-`County` table, so running just `npm run seed:pilot` works too — but running
-both explicitly is clearer the first time.)
 
 You should see:
 ```
@@ -84,17 +94,67 @@ Pilot seed complete. All accounts share the password: Pilot2026!
 
 Cooperative seeded: **Kirimiri Coffee Growers Cooperative Society** (`EMB-PILOT-0001`), Embu County.
 
+**The farmer login is separate from staff, and uses a different field.** The
+seeded farmer account signs in at `/member/login` with **National ID
+`PILOT-0001`** and the same password (`Pilot2026!`) — not an email address.
+This is a different table (`MemberAccount`) from staff (`User`), on a
+completely separate auth system by design (see the README's Module 7
+section) — seeding one does not seed the other, which is why `seed:pilot`
+explicitly creates both.
+
+### "Login doesn't work" — diagnose it in one command
+
+Before changing anything, run this in the Shell tab:
+
+```bash
+npm run verify:seed
+```
+
+It queries the live database directly and tells you exactly what exists —
+how many staff accounts, how many farmer accounts, and by name. This
+immediately separates the two possible causes:
+
+1. **The output says accounts are `0`** → the database is empty (the most
+   common cause, per the warning above). Run `npm run reset:all` and try
+   again.
+2. **The output lists real accounts, but login still fails from the
+   browser** → the database is fine and the problem is almost always one of:
+   - **Wrong field for the farmer.** The Member Portal login asks for
+     National ID, not email — `PILOT-0001`, not
+     `farmer@...`.
+   - **`NEXT_PUBLIC_API_BASE_URL`** on `embu-coop-frontend` isn't the
+     backend's actual Render URL (see Step 3 above) — if this is stale after
+     a redeploy, every request from the browser silently goes nowhere useful.
+     As of this update, the frontend tolerates a missing `/api` suffix or a
+     trailing slash on this value automatically — but it still needs to
+     point at the *correct backend URL*.
+   - **`FRONTEND_ORIGIN`** on `embu-coop-backend` doesn't exactly match the
+     frontend's actual Render URL — a mismatch here causes a CORS rejection
+     that often shows up in the browser as a generic "Network Error" with no
+     useful message on screen.
+   - Open the browser's DevTools → Network tab, retry the login, and click
+     the failed request — the real HTTP status and response body (401 vs. a
+     CORS error vs. no response at all) tells you which of the two URL
+     settings above is the one to fix.
+
+### Seeing "Not found" specifically?
+
+That exact message is the backend's own catch-all 404 handler responding —
+which means the browser successfully reached your backend server, just at a
+URL that doesn't match any real route. Every route lives under `/api/...`,
+so this happens when `NEXT_PUBLIC_API_BASE_URL` points at the bare backend
+root without that suffix. The frontend now normalizes this automatically
+(`frontend/lib/apiBaseUrl.js` appends `/api` if it's missing and strips a
+trailing slash), so redeploying the frontend after this update should
+resolve it even if the env var itself is still set slightly wrong — but
+it's worth correcting the env var to the full `.../api` form regardless, so
+it's unambiguous on inspection later.
+
 ### Already deployed and hit `P2021: table does not exist`?
 
 That means the build ran before this fix (with `migrate deploy` and no
-migration files). Run this once in the Shell tab to create the tables, then
-seed as normal:
-
-```bash
-npx prisma db push --accept-data-loss
-npm run seed:counties
-npm run seed:pilot
-```
+migration files). Run `npm run reset:all` (see above) to create the tables
+and seed them in one step.
 
 ## 5. Open self-signup for other testers
 

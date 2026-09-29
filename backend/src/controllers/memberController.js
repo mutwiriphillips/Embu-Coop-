@@ -92,6 +92,35 @@ async function listAssets(req, res) {
   res.json(assets);
 }
 
+// GET /api/member/input-credits — a farmer's own government-sourced input
+// credits (allocated by staff) and their remaining balance. Read-only, same
+// as every other member-side view: a farmer can see this was allocated to
+// them, but recording an allocation or a collection against it always
+// happens on the staff or agrovet side, never here.
+async function listInputCredits(req, res) {
+  const credits = await prisma.farmerInputCredit.findMany({
+    where: { memberId: req.member.id },
+    orderBy: { allocatedDate: "desc" },
+  });
+  res.json(credits);
+}
+
+// GET /api/member/input-collections — a farmer's own record of what they
+// collected, from which shop, and whether that shop has been reimbursed
+// yet — the same transparency this platform gives a farmer over their
+// produce and payouts, extended to the input-supply side.
+async function listInputCollections(req, res) {
+  const collections = await prisma.inputCollection.findMany({
+    where: { memberId: req.member.id },
+    include: {
+      items: true,
+      agrovetShop: { select: { id: true, name: true, physicalAddress: true } },
+    },
+    orderBy: { collectionDate: "desc" },
+  });
+  res.json(collections);
+}
+
 async function listPayouts(req, res) {
   const payouts = await prisma.payout.findMany({
     where: { memberId: req.member.id },
@@ -165,4 +194,4 @@ async function initiateContribution(req, res) {
   });
 }
 
-module.exports = { summary, listContributions, listProduce, listAssets, listPayouts, listAgms, initiateContribution };
+module.exports = { summary, listContributions, listProduce, listAssets, listInputCredits, listInputCollections, listPayouts, listAgms, initiateContribution };

@@ -201,6 +201,16 @@ export default function LandingPage() {
             Register
           </Link>
         </p>
+        <p className="mt-3 text-sm">
+          <span className="text-gray-500">Run an agrovet shop? </span>
+          <Link href="/agrovet/login" className="font-medium text-kenya-green hover:underline">
+            Sign in
+          </Link>
+          <span className="text-gray-400"> · </span>
+          <Link href="/agrovet/apply" className="font-medium text-kenya-green hover:underline">
+            Apply to join
+          </Link>
+        </p>
         <p className="mt-4">
           <Link href="/privacy" className="font-medium text-kenya-green hover:underline">
             Privacy &amp; Data Governance Policy

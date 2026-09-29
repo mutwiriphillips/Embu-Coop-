@@ -5,7 +5,7 @@ import ProtectedMemberRoute from "../../../components/ProtectedMemberRoute";
 import { useMemberAuth } from "../../../context/MemberAuthContext";
 import memberApi from "../../../lib/memberApi";
 
-const TABS = ["Overview", "Contributions", "Produce", "Payouts", "Meetings"];
+const TABS = ["Overview", "Contributions", "Produce", "Input Credits", "Payouts", "Meetings"];
 
 export default function MemberDashboardPage() {
   const { member, logout } = useMemberAuth();
@@ -51,6 +51,7 @@ export default function MemberDashboardPage() {
           {tab === "Overview" && <OverviewTab summary={summary} />}
           {tab === "Contributions" && <ContributionsTab onChange={loadSummary} />}
           {tab === "Produce" && <ProduceTab />}
+          {tab === "Input Credits" && <InputCreditsTab />}
           {tab === "Payouts" && <PayoutsTab />}
           {tab === "Meetings" && <MeetingsTab />}
         </div>
@@ -214,6 +215,66 @@ function ProduceTab() {
         Deliveries are recorded by your Cooperative Manager or a Field Officer at drop-off, so this list stays a
         reliable record for everyone — not self-reported.
       </p>
+    </div>
+  );
+}
+
+function InputCreditsTab() {
+  const [credits, setCredits] = useState([]);
+  const [collections, setCollections] = useState([]);
+  useEffect(() => {
+    memberApi.get("/member/input-credits").then((res) => setCredits(res.data)).catch(() => {});
+    memberApi.get("/member/input-collections").then((res) => setCollections(res.data)).catch(() => {});
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-gray-700">Your Input Credits</h3>
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+              <tr><th className="px-4 py-2">Programme</th><th className="px-4 py-2">Allocated</th><th className="px-4 py-2">Remaining</th><th className="px-4 py-2">Status</th></tr>
+            </thead>
+            <tbody>
+              {credits.map((c) => (
+                <tr key={c.id} className="border-t border-gray-100">
+                  <td className="px-4 py-2 font-medium">{c.programName}</td>
+                  <td className="px-4 py-2">KES {Number(c.totalAmount).toLocaleString()}</td>
+                  <td className="px-4 py-2">KES {Number(c.remainingAmount).toLocaleString()}</td>
+                  <td className="px-4 py-2">{c.status}</td>
+                </tr>
+              ))}
+              {credits.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">No input credits allocated yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-gray-700">What You've Collected</h3>
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+              <tr><th className="px-4 py-2">Date</th><th className="px-4 py-2">Shop</th><th className="px-4 py-2">Items</th><th className="px-4 py-2">Value</th></tr>
+            </thead>
+            <tbody>
+              {collections.map((c) => (
+                <tr key={c.id} className="border-t border-gray-100">
+                  <td className="px-4 py-2">{new Date(c.collectionDate).toLocaleDateString()}</td>
+                  <td className="px-4 py-2">{c.agrovetShop?.name}</td>
+                  <td className="px-4 py-2">{c.items?.map((i) => i.productNameSnapshot).join(", ")}</td>
+                  <td className="px-4 py-2">KES {Number(c.totalValue).toLocaleString()}</td>
+                </tr>
+              ))}
+              {collections.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">No collections recorded yet.</td></tr>}
+            </tbody>
+          </table>
+          <p className="border-t border-gray-100 px-4 py-2 text-xs text-gray-400">
+            Collections are recorded by the agrovet shop at the point you collect your inputs — never self-reported here.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
