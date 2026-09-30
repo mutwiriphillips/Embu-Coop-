@@ -41,6 +41,10 @@ async function listCooperatives(req, res) {
 
   const cooperatives = await prisma.cooperative.findMany({
     where: {
+      // A Cooperative Manager only ever sees the cooperative(s) they manage;
+      // listing the whole county just led to "You do not manage this
+      // cooperative" on every other row they clicked.
+      ...(req.user.role === "COOPERATIVE_MANAGER" ? { managerId: req.user.id } : {}),
       ...(countyId ? { countyId } : {}),
       ...(valueChain ? { valueChain } : {}),
       ...(subCounty ? { subCounty } : {}),

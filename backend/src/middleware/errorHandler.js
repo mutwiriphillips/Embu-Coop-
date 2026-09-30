@@ -4,7 +4,11 @@ const { Prisma } = require("@prisma/client");
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
   if (err instanceof ZodError) {
-    return res.status(400).json({ error: "Validation failed", details: err.errors });
+    // Name the field that failed, so the user sees something actionable
+    // instead of a bare "Validation failed".
+    const first = err.errors?.[0];
+    const field = first?.path?.join(".") || "input";
+    return res.status(400).json({ error: `Validation failed on "${field}": ${first?.message || "invalid value"}`, details: err.errors });
   }
 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {

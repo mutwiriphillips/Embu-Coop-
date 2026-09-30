@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
+const { defaultPermissionsForRole } = require("../utils/rolePermissions");
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -72,6 +73,21 @@ async function signup(req, res) {
     return res.status(400).json({ error: "cooperativeId is required when signing up as a Cooperative Manager" });
   }
 
+  // Signing up as a cooperative's manager used to silently take the
+  // cooperative away from whoever already managed it (including the pilot
+  // manager@embu.go.ke account), leaving them locked out with no error. A
+  // cooperative that already has a manager can no longer be claimed here.
+  if (data.role === "COOPERATIVE_MANAGER") {
+    const coop = await prisma.cooperative.findUnique({ where: { id: data.cooperativeId } });
+    if (!coop) return res.status(404).json({ error: "Cooperative not found" });
+    if (coop.countyId !== data.countyId) {
+      return res.status(400).json({ error: "That cooperative is not in the county you selected" });
+    }
+    if (coop.managerId) {
+      return res.status(409).json({ error: "That cooperative already has a manager. Ask your County Director to assign you." });
+    }
+  }
+
   const passwordHash = await bcrypt.hash(data.password, 10);
 
   const user = await prisma.user.create({
@@ -81,14 +97,7 @@ async function signup(req, res) {
       passwordHash,
       role: data.role,
       countyId: data.countyId,
-      // Test-run signups get baseline view/edit access on the modules they need.
-      permissions: {
-        create: [
-          { module: "cooperatives", canView: true, canEdit: data.role === "COOPERATIVE_MANAGER" },
-          { module: "documents", canView: true, canEdit: true },
-          { module: "governance", canView: true, canEdit: data.role === "COOPERATIVE_MANAGER" },
-        ],
-      },
+      permissions: { create: defaultPermissionsForRole(data.role) },
     },
   });
 

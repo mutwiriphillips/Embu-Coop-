@@ -112,6 +112,7 @@ async function main() {
   console.log("\nSeeded login reference (password Pilot2026! for all):");
   console.log("  National Admin:            admin@cooperatives.go.ke");
   console.log("  County Director (Embu):    director@embu.go.ke");
+  console.log("  Sub-County Officer (Embu): subcounty@embu.go.ke");
   console.log("  Field Officer:             employee@embu.go.ke");
   console.log("  Cooperative Manager:       manager@embu.go.ke");
   console.log("  Farmer (Member Portal):    National ID \"PILOT-0001\" at /member/login");

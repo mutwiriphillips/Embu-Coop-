@@ -16,8 +16,9 @@ router.get("/signup/cooperatives", async (req, res) => {
     return res.status(403).json({ error: "Open signup is disabled on this environment" });
   }
   const { countyId } = req.query;
+  // Only cooperatives with no manager yet can be claimed through signup.
   const cooperatives = await prisma.cooperative.findMany({
-    where: countyId ? { countyId } : {},
+    where: { ...(countyId ? { countyId } : {}), managerId: null },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });

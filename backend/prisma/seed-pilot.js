@@ -2,6 +2,7 @@
  * Pilot / test-run seed — exactly what's needed to demo the system with:
  *   - 1 National Admin account (cross-county oversight)
  *   - 1 County Director (Embu — the original pilot county)
+ *   - 1 Sub-County Officer (Embu, Runyenjes)
  *   - 1 County employee (Field Officer, Embu)
  *   - 1 Cooperative Manager (Embu)
  *   - 1 Cooperative, in Embu County, with the manager attached
@@ -20,6 +21,7 @@
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 const { execSync } = require("child_process");
+const { defaultPermissionsForRole } = require("../src/utils/rolePermissions");
 
 const prisma = new PrismaClient();
 const PILOT_PASSWORD = "Pilot2026!";
@@ -61,6 +63,25 @@ async function main() {
       countyId: embu.id,
       designation: "Director, Co-operative Development",
       reportsToId: nationalAdmin.id,
+    },
+  });
+
+  // Sub-County Officer — the first-tier reviewer for documents and agrovet
+  // applications. Earlier versions of this seed never created one, so this
+  // login simply didn't exist.
+  await prisma.user.upsert({
+    where: { email: "subcounty@embu.go.ke" },
+    update: {},
+    create: {
+      fullName: "Test Sub-County Officer",
+      email: "subcounty@embu.go.ke",
+      passwordHash,
+      role: "SUBCOUNTY_OFFICER",
+      countyId: embu.id,
+      designation: "Sub-County Co-operative Officer",
+      subCounty: "Runyenjes",
+      reportsToId: director.id,
+      permissions: { create: defaultPermissionsForRole("SUBCOUNTY_OFFICER") },
     },
   });
 
@@ -299,6 +320,7 @@ async function main() {
   console.log("Pilot seed complete. All accounts share the password:", PILOT_PASSWORD);
   console.log(`  National Admin: admin@cooperatives.go.ke`);
   console.log(`  County Director (Embu): director@embu.go.ke`);
+  console.log(`  Sub-County Officer (Embu): subcounty@embu.go.ke`);
   console.log(`  Employee (Field Officer): employee@embu.go.ke`);
   console.log(`  Manager: manager@embu.go.ke`);
   console.log(`  Cooperative: ${cooperative.name} (${cooperative.registrationNumber}) — Embu County`);
