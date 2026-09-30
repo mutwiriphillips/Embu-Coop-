@@ -53,46 +53,73 @@ deploy:
 
 ## 4. Seed the counties, then the pilot accounts
 
-**Every schema change to this project requires `db push --force-reset`, which
-drops every table — including whatever accounts were already seeded.** If
-you've deployed an update since the last time you seeded (new modules,
-schema changes), the database is empty again and every login will fail with
-"Invalid credentials" for the boring reason that the account doesn't exist
-yet — not because anything is broken. The single command below does the
-reset and both seed steps together, so this can't be forgotten as two
-separate steps again:
+> **⚠ EMBU IS LIVE. Do not run `npm run reset:all` on the production
+> database.** It runs `prisma db push --force-reset`, which drops every
+> table, including real farmer, cooperative, and staff records. It is now
+> guarded and refuses to run unless you type an explicit unlock phrase
+> (see `prisma/reset-guard.js`). Only ever unlock it on a throwaway test
+> database.
+
+**To add the pilot/test accounts, including the agrovet account, to the
+live database, run this. It is safe on live data:**
 
 ```bash
-npm run reset:all
-```
-
-That's equivalent to running these three in order, which still works if you
-prefer to see each step individually:
-```bash
-npx prisma db push --force-reset --accept-data-loss
-npm run seed:counties
 npm run seed:pilot
 ```
 
-You should see:
+It looks up every record first and only creates what's missing. It never
+updates, deletes, or resets anything, so running it twice changes nothing
+the second time.
+
+**Schema changes on a live database:** the Render build command already runs
+`prisma db push --accept-data-loss` on every deploy. For additive changes
+(new tables, new optional fields), such as the Asset and Agrovet modules,
+that applies them without touching existing rows. Before deploying a change
+that *removes* or *renames* a column, take a database backup first, because
+that is the case where `--accept-data-loss` genuinely drops data.
+
+**Fresh, empty test database only:**
+```bash
+ALLOW_DB_RESET=I_UNDERSTAND_THIS_DELETES_ALL_DATA npm run reset:all
 ```
-Seeded 47 counties.
+
+You should see (on a database that doesn't have them yet):
+```
 Pilot seed complete. All accounts share the password: Pilot2026!
   National Admin: admin@cooperatives.go.ke
   County Director (Embu): director@embu.go.ke
   Employee (Field Officer): employee@embu.go.ke
   Manager: manager@embu.go.ke
   Cooperative: Kirimiri Coffee Growers Cooperative Society (EMB-PILOT-0001) — Embu County
+  Member Portal login: National ID "PILOT-0001", password "Pilot2026!"
+  Agrovet Portal login: National ID "AGRO-0001", password "Pilot2026!" (at /agrovet/login)
 ```
 
-| Role | Email | Purpose |
-|---|---|---|
-| National Admin | `admin@cooperatives.go.ke` | Cross-county oversight, national dashboard, staff/cooperatives in any county |
-| County Director (Embu) | `director@embu.go.ke` | Admin oversight within Embu County only |
-| Field Officer (employee) | `employee@embu.go.ke` | Plans visits, submits reports, uploads documents (Embu) |
-| Cooperative Manager | `manager@embu.go.ke` | Manages the one seeded cooperative's members/documents/committee |
+### All pilot / test logins (password `Pilot2026!` for every one)
+
+| Role | Sign in at | Username field | Value |
+|---|---|---|---|
+| National Admin | `/login` | Email | `admin@cooperatives.go.ke` |
+| County Director (Embu) | `/login` | Email | `director@embu.go.ke` |
+| Field Officer | `/login` | Email | `employee@embu.go.ke` |
+| Cooperative Manager | `/login` | Email | `manager@embu.go.ke` |
+| Farmer (Member Portal) | `/member/login` | National ID | `PILOT-0001` |
+| Agrovet shop owner | `/agrovet/login` | National ID | `AGRO-0001` |
 
 Cooperative seeded: **Kirimiri Coffee Growers Cooperative Society** (`EMB-PILOT-0001`), Embu County.
+
+The agrovet account belongs to **Runyenjes Agrovet Supplies (Pilot)**, an
+already-APPROVED Embu shop with a six-item catalogue (DAP, CAN, maize seed,
+manure, jembe, knapsack sprayer; illustrative prices). The farmer
+`PILOT-0001` also has a **KES 10,000 input credit** ("Embu County Input
+Subsidy (Pilot)"). Together these let you demo the whole agrovet flow
+straight away: the agrovet looks up `PILOT-0001`, records a collection, the
+farmer sees it in their Input Credits tab, and the Director reimburses the
+shop from the Agrovet Shops page.
+
+**Test accounts on a live system:** these accounts share a publicly
+documented password. Before real farmers and shops rely on Embu, either
+change these passwords or deactivate the accounts once demos are done.
 
 **The farmer login is separate from staff, and uses a different field.** The
 seeded farmer account signs in at `/member/login` with **National ID
@@ -114,14 +141,14 @@ It queries the live database directly and tells you exactly what exists —
 how many staff accounts, how many farmer accounts, and by name. This
 immediately separates the two possible causes:
 
-1. **The output says accounts are `0`** → the database is empty (the most
-   common cause, per the warning above). Run `npm run reset:all` and try
-   again.
+1. **The output says accounts are `0`** → the accounts don't exist yet.
+   Run `npm run seed:pilot` (safe on live data) and try again. Do **not**
+   run `reset:all` on the live Embu database.
 2. **The output lists real accounts, but login still fails from the
    browser** → the database is fine and the problem is almost always one of:
-   - **Wrong field for the farmer.** The Member Portal login asks for
-     National ID, not email — `PILOT-0001`, not
-     `farmer@...`.
+   - **Wrong field for the farmer or agrovet.** The Member Portal and the
+     Agrovet Portal both ask for a National ID, not an email: `PILOT-0001`
+     and `AGRO-0001` respectively.
    - **`NEXT_PUBLIC_API_BASE_URL`** on `embu-coop-frontend` isn't the
      backend's actual Render URL (see Step 3 above) — if this is stale after
      a redeploy, every request from the browser silently goes nowhere useful.
@@ -152,9 +179,10 @@ it's unambiguous on inspection later.
 
 ### Already deployed and hit `P2021: table does not exist`?
 
-That means the build ran before this fix (with `migrate deploy` and no
-migration files). Run `npm run reset:all` (see above) to create the tables
-and seed them in one step.
+That means the tables were never created. On a brand-new, empty database
+only, you can use the guarded `reset:all` (see above). On any database that
+already holds real data, run `npx prisma db push` (which creates missing
+tables without dropping existing ones), then `npm run seed:pilot`.
 
 ## 5. Open self-signup for other testers
 

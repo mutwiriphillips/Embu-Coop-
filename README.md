@@ -93,16 +93,15 @@ cd backend
 cp .env.example .env      # fill in DATABASE_URL, JWT_SECRET
 npm install
 npx prisma generate
-npm run reset:all          # db push + seed counties + seed pilot accounts, in one step
+ALLOW_DB_RESET=I_UNDERSTAND_THIS_DELETES_ALL_DATA npm run reset:all   # EMPTY local DB only — wipes everything
 npm run dev                # http://localhost:4000
 ```
 
-Whenever `prisma/schema.prisma` changes, re-run `npm run reset:all` — it
-recreates the tables from scratch and reseeds both the counties and the
-pilot accounts together, so login can never silently fail just because a
-schema change wiped the database and the seed step got missed. If a login
-ever stops working, `npm run verify:seed` queries the database directly and
-reports exactly which accounts do or don't exist, rather than guessing.
+`reset:all` drops every table and is guarded (see `prisma/reset-guard.js`).
+**Never run it on the live Embu database.** To add missing pilot accounts to
+any database, including a live one, run `npm run seed:pilot`. It only
+creates what's missing. `npm run verify:seed` reports exactly which staff,
+farmer, and agrovet accounts exist.
 
 ### 3. Frontend
 
@@ -118,6 +117,8 @@ All pilot accounts share the password `Pilot2026!`:
 - **County Director (Embu):** director@embu.go.ke
 - **Field Officer:** employee@embu.go.ke
 - **Cooperative Manager:** manager@embu.go.ke
+- **Farmer (Member Portal, `/member/login`):** National ID `PILOT-0001`
+- **Agrovet shop owner (`/agrovet/login`):** National ID `AGRO-0001`
 
 ### Pilot / Test Run on Render
 

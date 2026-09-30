@@ -105,6 +105,28 @@ As Director or National Admin:
 - [ ] Sign out, then register a brand-new farmer via `/member/register` against the new cooperative/member created in Phase 2
 - [ ] Confirm registration with a National ID that does **not** match any real Member record is rejected with a clear message, not a silent failure or a 500 error
 
+## Phase 8b — Agrovet Portal (10 minutes)
+
+- [ ] `/agrovet/apply` county dropdown shows **"Select county (47)…"** with
+      all 47 counties, and shows a visible error with a Retry button (not a
+      blank list) if the backend is unreachable
+- [ ] `/agrovet/login` with National ID `AGRO-0001` and password `Pilot2026!`
+      logs in and shows **Runyenjes Agrovet Supplies (Pilot)** as **Approved**
+- [ ] My Catalog lists the 6 seeded products
+- [ ] Record Collection: look up `PILOT-0001`, select the "Embu County Input
+      Subsidy (Pilot)" credit (KES 10,000 remaining), add 2 × DAP (KES 5,000),
+      record it, and confirm the remaining credit shows KES 5,000
+- [ ] Try to add items worth more than the remaining credit, and confirm the
+      button is disabled and the server also rejects it
+- [ ] As the farmer (`PILOT-0001`), the Input Credits tab shows KES 5,000
+      remaining and the collection from Runyenjes Agrovet Supplies
+- [ ] As the Director, Agrovet Shops → the pilot shop shows the collection
+      under Pending Reimbursement; reimburse it and confirm it moves to
+      Reimbursement History
+- [ ] Submit a fresh application at `/agrovet/apply` (any county), and confirm
+      it appears as PENDING for a Sub-County Officer / Director in that county
+      and **does not** appear for the Embu Director if it's another county
+
 ## Phase 9 — Access-Control Boundaries (10 minutes — the most important phase)
 
 This is what all the crafted-JWT testing earlier in the build proved *should*
@@ -123,6 +145,9 @@ work. This phase proves it actually does, against the real deployment.
 - [ ] Confirm a staff login (any role) cannot reach `/member/dashboard`, and a
       farmer login cannot reach `/dashboard` or any `/staff`, `/cooperatives`,
       etc. page
+- [ ] Confirm the agrovet login (`AGRO-0001`) cannot reach any staff page or
+      `/member/dashboard`, and neither staff nor farmer logins can reach
+      `/agrovet/dashboard`
 
 ## Phase 10 — Signed-in State & Sessions
 
