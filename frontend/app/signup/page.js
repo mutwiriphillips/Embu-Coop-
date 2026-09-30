@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCounties, CountySelect } from "../../lib/useCounties";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
 
@@ -9,7 +10,7 @@ import api from "../../lib/api";
 export default function SignupPage() {
   const router = useRouter();
   const [cooperatives, setCooperatives] = useState([]);
-  const [counties, setCounties] = useState([]);
+  const { counties, loading: countiesLoading, error: countiesError, retry: retryCounties } = useCounties();
   const [disabled, setDisabled] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
@@ -21,14 +22,6 @@ export default function SignupPage() {
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    api.get("/counties").then((res) => setCounties(res.data)).catch(() => {});
-    api
-      .get("/auth/signup/cooperatives")
-      .then(() => {})
-      .catch(() => setDisabled(true));
-  }, []);
 
   useEffect(() => {
     if (!form.countyId || form.role !== "COOPERATIVE_MANAGER") {
@@ -93,11 +86,15 @@ export default function SignupPage() {
             <option value="COOPERATIVE_MANAGER">Cooperative Manager</option>
           </select>
 
-          <select required className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            value={form.countyId} onChange={(e) => setForm({ ...form, countyId: e.target.value, cooperativeId: "" })}>
-            <option value="">Select your county…</option>
-            {counties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <CountySelect
+            value={form.countyId}
+            onChange={(e) => setForm({ ...form, countyId: e.target.value, cooperativeId: "" })}
+            counties={counties}
+            loading={countiesLoading}
+            error={countiesError}
+            retry={retryCounties}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-kenya-green focus:outline-none disabled:bg-gray-50"
+          />
 
           {form.role === "COOPERATIVE_MANAGER" && (
             <select required className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"

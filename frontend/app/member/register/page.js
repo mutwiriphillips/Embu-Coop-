@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCounties, CountySelect } from "../../../lib/useCounties";
 import { useMemberAuth } from "../../../context/MemberAuthContext";
 import memberApi from "../../../lib/memberApi";
 
 export default function MemberRegisterPage() {
   const { register } = useMemberAuth();
-  const [counties, setCounties] = useState([]);
+  const { counties, loading: countiesLoading, error: countiesError, retry: retryCounties } = useCounties();
   const [cooperatives, setCooperatives] = useState([]);
   const [form, setForm] = useState({
     countyId: "",
@@ -18,10 +19,6 @@ export default function MemberRegisterPage() {
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    memberApi.get("/counties").then((res) => setCounties(res.data)).catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (!form.countyId) {
@@ -63,11 +60,15 @@ export default function MemberRegisterPage() {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <select required className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            value={form.countyId} onChange={(e) => setForm({ ...form, countyId: e.target.value, cooperativeId: "" })}>
-            <option value="">Select your county…</option>
-            {counties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <CountySelect
+            value={form.countyId}
+            onChange={(e) => setForm({ ...form, countyId: e.target.value, cooperativeId: "" })}
+            counties={counties}
+            loading={countiesLoading}
+            error={countiesError}
+            retry={retryCounties}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-kenya-green focus:outline-none disabled:bg-gray-50"
+          />
 
           <select required disabled={!form.countyId} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
             value={form.cooperativeId} onChange={(e) => setForm({ ...form, cooperativeId: e.target.value })}>

@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useCounties, CountySelect } from "../../../lib/useCounties";
 import { useAgrovetAuth } from "../../../context/AgrovetAuthContext";
-import agrovetApi from "../../../lib/agrovetApi";
 import { describeAuthError } from "../../../lib/authErrors";
 
 export default function AgrovetApplyPage() {
   const { apply } = useAgrovetAuth();
-  const [counties, setCounties] = useState([]);
+  const { counties, loading: countiesLoading, error: countiesError, retry: retryCounties } = useCounties();
   const [form, setForm] = useState({
     shopName: "",
     ownerName: "",
@@ -22,12 +22,6 @@ export default function AgrovetApplyPage() {
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    // The counties list is public — same endpoint the farmer registration
-    // form already uses, no agrovet-specific auth needed to see it.
-    agrovetApi.get("/counties").then((res) => setCounties(res.data)).catch(() => {});
-  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -74,17 +68,15 @@ export default function AgrovetApplyPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium">County</label>
-            <select
-              required
-              value={form.countyId}
-              onChange={(e) => setForm({ ...form, countyId: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-kenya-green focus:outline-none"
-            >
-              <option value="">Select county…</option>
-              {counties.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <CountySelect
+                value={form.countyId}
+                onChange={(e) => setForm({ ...form, countyId: e.target.value })}
+                counties={counties}
+                loading={countiesLoading}
+                error={countiesError}
+                retry={retryCounties}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-kenya-green focus:outline-none disabled:bg-gray-50"
+              />
           </div>
 
           {field("Sub-County (optional)", "subCounty", { required: false })}

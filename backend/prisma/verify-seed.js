@@ -23,7 +23,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("=== Database contents check ===\n");
 
-  let countyCount, userCount, users, cooperativeCount, memberAccountCount, memberAccounts;
+  let countyCount, userCount, users, cooperativeCount, memberAccountCount, memberAccounts, agrovetAccounts;
 
   try {
     countyCount = await prisma.county.count();
@@ -36,6 +36,9 @@ async function main() {
     memberAccountCount = await prisma.memberAccount.count();
     memberAccounts = await prisma.memberAccount.findMany({
       select: { nationalId: true, active: true, member: { select: { legalName: true } } },
+    });
+    agrovetAccounts = await prisma.agrovetAccount.findMany({
+      select: { nationalId: true, active: true, agrovetShop: { select: { name: true, status: true } } },
     });
   } catch (err) {
     console.error("Could not query the database at all. This usually means:");
@@ -50,7 +53,8 @@ async function main() {
   console.log(`Counties seeded:        ${countyCount} (expect 47)`);
   console.log(`Staff (User) accounts:  ${userCount}`);
   console.log(`Cooperatives:           ${cooperativeCount}`);
-  console.log(`Member accounts:        ${memberAccountCount}\n`);
+  console.log(`Member accounts:        ${memberAccountCount}`);
+  console.log(`Agrovet accounts:       ${agrovetAccounts.length}\n`);
 
   if (userCount === 0) {
     console.log("❌ NO STAFF ACCOUNTS EXIST. This is why staff logins fail.");
@@ -74,6 +78,22 @@ async function main() {
     console.log("");
   }
 
+  if (agrovetAccounts.length === 0) {
+    console.log("❌ NO AGROVET ACCOUNTS EXIST. This is why the agrovet login fails.");
+    console.log("   Run: npm run seed:pilot  (safe on a live database — it only adds what's missing)\n");
+  } else {
+    console.log("Agrovet accounts on file:");
+    for (const a of agrovetAccounts) {
+      console.log(`  - National ID: ${a.nationalId}  ${a.active ? "active" : "DEACTIVATED"}  — ${a.agrovetShop.name} [${a.agrovetShop.status}]`);
+    }
+    console.log("");
+  }
+
+  if (countyCount < 47) {
+    console.log(`⚠ Only ${countyCount} of 47 counties present. The public county list now restores the`);
+    console.log("   missing ones automatically on first request, or run: npm run seed:counties\n");
+  }
+
   if (userCount > 0 && memberAccountCount > 0) {
     console.log("✅ Accounts exist. If login STILL fails from the browser, the problem is");
     console.log("   almost certainly not the database — check, in order:");
@@ -95,6 +115,7 @@ async function main() {
   console.log("  Field Officer:             employee@embu.go.ke");
   console.log("  Cooperative Manager:       manager@embu.go.ke");
   console.log("  Farmer (Member Portal):    National ID \"PILOT-0001\" at /member/login");
+  console.log("  Agrovet (Agrovet Portal):  National ID \"AGRO-0001\" at /agrovet/login");
 }
 
 main()

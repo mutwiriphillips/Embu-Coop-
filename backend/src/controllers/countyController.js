@@ -1,8 +1,29 @@
 const prisma = require("../config/db");
+const { COUNTIES } = require("../data/kenyaCounties");
+
+// Self-healing: every public county dropdown (staff signup, farmer
+// registration, agrovet application) depends on this table holding all 47
+// counties. If a deployment ever skipped seed-counties.js, or a database was
+// reset without reseeding, those dropdowns would silently render empty — so
+// if fewer than 47 rows exist, restore the missing ones here, idempotently
+// (upsert by official code: existing rows are only name/region-corrected,
+// never duplicated or deleted). Normally a no-op count query.
+async function ensureAllCounties() {
+  const count = await prisma.county.count();
+  if (count >= COUNTIES.length) return;
+  for (const [code, name, region] of COUNTIES) {
+    await prisma.county.upsert({
+      where: { code },
+      update: { name, region },
+      create: { code, name, region },
+    });
+  }
+}
 
 // Public: powers the landing page, signup form, and the dashboard county
 // selector. No sensitive data — just the 47 official counties.
 async function listCounties(req, res) {
+  await ensureAllCounties();
   const counties = await prisma.county.findMany({
     orderBy: { name: "asc" },
   });
@@ -29,4 +50,4 @@ async function countySummary(req, res) {
   );
 }
 
-module.exports = { listCounties, countySummary };
+module.exports = { listCounties, countySummary, ensureAllCounties };

@@ -5,6 +5,12 @@
  *   - 1 County employee (Field Officer, Embu)
  *   - 1 Cooperative Manager (Embu)
  *   - 1 Cooperative, in Embu County, with the manager attached
+ *   - 1 Member Portal account (National ID PILOT-0001)
+ *   - 1 APPROVED Agrovet shop + account (National ID AGRO-0001), with a
+ *     small catalogue, and a KES 10,000 input credit for PILOT-0001
+ *
+ * Safe to re-run against a live database: every record is looked up first
+ * and only created if missing. It never deletes or resets anything.
  *
  * Requires the 47 counties to already exist — run seed-counties.js first
  * (this script also runs it for you via ensureCounties()).
@@ -211,6 +217,85 @@ async function main() {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Agrovet pilot account (Module 9). Written to be safe to run against a
+  // database that already holds LIVE data (Embu is live): every step looks
+  // first and only creates what's missing — nothing is updated, deleted, or
+  // reset. Re-running the seed is always a no-op for anything that exists.
+  // ---------------------------------------------------------------------
+  const AGROVET_NATIONAL_ID = "AGRO-0001";
+  let agrovetAccount = await prisma.agrovetAccount.findUnique({
+    where: { nationalId: AGROVET_NATIONAL_ID },
+    include: { agrovetShop: true },
+  });
+  if (!agrovetAccount) {
+    const now = new Date();
+    const shop = await prisma.agrovetShop.create({
+      data: {
+        name: "Runyenjes Agrovet Supplies (Pilot)",
+        ownerName: "Test Agrovet Owner",
+        phoneNumber: "+254700000002",
+        physicalAddress: "Runyenjes Market (pilot test shop)",
+        countyId: embu.id,
+        subCounty: "Runyenjes",
+        reimbursementMsisdn: "+254700000002",
+        // Seeded straight to APPROVED so the collection flow can be demoed
+        // immediately; recorded as reviewed and approved by the seeded Embu
+        // Director so the approval trail is still complete.
+        status: "APPROVED",
+        reviewedById: director.id,
+        reviewedAt: now,
+        approvedById: director.id,
+        approvedAt: now,
+        account: {
+          create: {
+            nationalId: AGROVET_NATIONAL_ID,
+            phoneNumber: "+254700000002",
+            passwordHash,
+          },
+        },
+        // Illustrative pilot catalogue prices, not a price list.
+        products: {
+          create: [
+            { name: "DAP Fertilizer (50kg bag)", category: "FERTILIZER", unit: "BAG", unitPrice: 2500 },
+            { name: "CAN Top-Dressing Fertilizer (50kg bag)", category: "FERTILIZER", unit: "BAG", unitPrice: 2500 },
+            { name: "Certified Maize Seed (2kg)", category: "SEEDS", unit: "PIECE", unitPrice: 700 },
+            { name: "Farmyard Manure (50kg bag)", category: "MANURE", unit: "BAG", unitPrice: 300 },
+            { name: "Jembe (hoe)", category: "TOOLS", unit: "PIECE", unitPrice: 450 },
+            { name: "Knapsack Sprayer (16L)", category: "EQUIPMENT", unit: "PIECE", unitPrice: 3500 },
+          ],
+        },
+      },
+    });
+    console.log(`  Created agrovet pilot shop: ${shop.name}`);
+  }
+
+  // A government input credit for the seeded Test Member, so the agrovet can
+  // look up PILOT-0001 and record a collection straight away. Only created
+  // if that member has no input credit under this programme name yet.
+  const PILOT_PROGRAMME = "Embu County Input Subsidy (Pilot)";
+  const pilotMember = await prisma.member.findFirst({
+    where: { cooperativeId: cooperative.id, nationalId: "PILOT-0001" },
+  });
+  if (pilotMember) {
+    const existingCredit = await prisma.farmerInputCredit.findFirst({
+      where: { memberId: pilotMember.id, programName: PILOT_PROGRAMME },
+    });
+    if (!existingCredit) {
+      await prisma.farmerInputCredit.create({
+        data: {
+          memberId: pilotMember.id,
+          programName: PILOT_PROGRAMME,
+          totalAmount: 10000,
+          remainingAmount: 10000,
+          allocatedById: director.id,
+          allocatedDate: new Date(),
+        },
+      });
+      console.log("  Allocated a KES 10,000 pilot input credit to PILOT-0001");
+    }
+  }
+
   console.log("Pilot seed complete. All accounts share the password:", PILOT_PASSWORD);
   console.log(`  National Admin: admin@cooperatives.go.ke`);
   console.log(`  County Director (Embu): director@embu.go.ke`);
@@ -218,6 +303,7 @@ async function main() {
   console.log(`  Manager: manager@embu.go.ke`);
   console.log(`  Cooperative: ${cooperative.name} (${cooperative.registrationNumber}) — Embu County`);
   console.log(`  Member Portal login: National ID "PILOT-0001", password "${PILOT_PASSWORD}"`);
+  console.log(`  Agrovet Portal login: National ID "${AGROVET_NATIONAL_ID}", password "${PILOT_PASSWORD}" (at /agrovet/login)`);
 }
 
 main()
