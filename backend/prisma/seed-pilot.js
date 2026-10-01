@@ -322,7 +322,7 @@ async function main() {
   console.log(`  County Director (Embu): director@embu.go.ke`);
   console.log(`  Sub-County Officer (Embu): subcounty@embu.go.ke`);
   console.log(`  Employee (Field Officer): employee@embu.go.ke`);
-  console.log(`  Manager: manager@embu.go.ke`);
+  console.log(`  Cooperative Manager: manager@embu.go.ke or EMB-PILOT-0001 (at /cooperative/login)`);
   console.log(`  Cooperative: ${cooperative.name} (${cooperative.registrationNumber}) — Embu County`);
   console.log(`  Member Portal login: National ID "PILOT-0001", password "${PILOT_PASSWORD}"`);
   console.log(`  Agrovet Portal login: National ID "${AGROVET_NATIONAL_ID}", password "${PILOT_PASSWORD}" (at /agrovet/login)`);

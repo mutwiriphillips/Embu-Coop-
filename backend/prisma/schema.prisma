@@ -76,6 +76,7 @@ model User {
   recordedAssetEvents   AssetEvent[]       @relation("AssetEventRecordedBy")
   reviewedAgrovets      AgrovetShop[]      @relation("AgrovetReviewer")
   approvedAgrovets      AgrovetShop[]      @relation("AgrovetApprover")
+  registeredAgrovets    AgrovetShop[]      @relation("AgrovetRegisteredBy")
   creditsAllocated      FarmerInputCredit[] @relation("CreditAllocatedBy")
   reimbursementsProcessed AgrovetReimbursement[] @relation("ReimbursementProcessedBy")
 
@@ -662,6 +663,11 @@ model AgrovetShop {
   approvedBy        User?                 @relation("AgrovetApprover", fields: [approvedById], references: [id])
   approvedAt        DateTime?
   rejectionNote     String?
+  // Set when county staff registered the shop on the owner's behalf (rather
+  // than the owner applying through /agrovet/apply). Nullable, so adding it
+  // is a non-destructive schema change on the live database.
+  registeredById    String?
+  registeredBy      User?                 @relation("AgrovetRegisteredBy", fields: [registeredById], references: [id])
   // Where reimbursement is actually sent — deliberately separate from the
   // owner's own login phone number, since the two can differ (e.g. a
   // business till number vs a personal line).

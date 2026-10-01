@@ -23,8 +23,18 @@ const signupSchema = z.object({
   cooperativeId: z.string().uuid().optional(),
 });
 
+// Cooperative Managers sign in through their own Cooperative Portal and get
+// their own token type ("cooperative"). Everyone else on the county side gets
+// "staff". authenticate() checks the type against the account's role, so the
+// two can't be used in place of each other. Managers keep the same User
+// record, so their cooperative workspace and its tested access rules
+// (requireCooperativeAccess) are unchanged.
+function tokenTypeForRole(role) {
+  return role === "COOPERATIVE_MANAGER" ? "cooperative" : "staff";
+}
+
 function signToken(user) {
-  return jwt.sign({ sub: user.id, role: user.role, type: "staff" }, process.env.JWT_SECRET, {
+  return jwt.sign({ sub: user.id, role: user.role, type: tokenTypeForRole(user.role) }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || "8h",
   });
 }
@@ -49,6 +59,15 @@ async function login(req, res) {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
     return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  // Checked only AFTER the password is verified, so this response never
+  // reveals which emails belong to cooperative managers.
+  if (user.role === "COOPERATIVE_MANAGER") {
+    return res.status(403).json({
+      error: "Cooperative managers sign in through the Cooperative Portal.",
+      code: "USE_COOPERATIVE_PORTAL",
+    });
   }
 
   const token = signToken(user);
@@ -115,4 +134,4 @@ async function signup(req, res) {
   res.status(201).json({ token, user: toPublicUser(userWithCounty) });
 }
 
-module.exports = { login, me, signup, toPublicUser };
+module.exports = { login, me, signup, toPublicUser, signToken, tokenTypeForRole };

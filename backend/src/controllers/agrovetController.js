@@ -1,3 +1,4 @@
+const bcrypt = require("bcryptjs");
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
@@ -18,6 +19,7 @@ async function listAgrovets(req, res) {
       county: { select: { id: true, name: true } },
       reviewedBy: { select: { id: true, fullName: true } },
       approvedBy: { select: { id: true, fullName: true } },
+      registeredBy: { select: { id: true, fullName: true, role: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -108,4 +110,72 @@ async function suspendAgrovet(req, res) {
   res.json(updated);
 }
 
-module.exports = { listAgrovets, getAgrovet, reviewAgrovet, approveAgrovet, suspendAgrovet };
+
+const blank = (schema) => z.preprocess((v) => (v === "" || v === null ? undefined : v), schema);
+const registerSchema = z.object({
+  shopName: z.string().min(1),
+  ownerName: z.string().min(1),
+  ownerNationalId: z.string().trim().min(1),
+  phoneNumber: z.string().min(1),
+  email: blank(z.string().email().optional()),
+  physicalAddress: z.string().min(1),
+  countyId: blank(z.string().uuid().optional()),
+  subCounty: blank(z.string().optional()),
+  reimbursementMsisdn: blank(z.string().optional()),
+  temporaryPassword: z.string().min(8),
+});
+
+// POST /agrovets — county staff register a shop on its owner's behalf (for
+// owners who won't apply online themselves). The registering officer's
+// registration counts as the first-tier review, so the shop goes straight to
+// REVIEWED and still needs a Director's sign-off (POST /:id/approve) before
+// it can record a single collection. The owner signs in at /agrovet/login
+// with their National ID and the temporary password the officer gives them.
+async function registerAgrovet(req, res) {
+  const data = registerSchema.parse(req.body);
+  const countyId = req.user.role === "NATIONAL_ADMIN" ? data.countyId : req.user.countyId;
+  if (!countyId) return res.status(400).json({ error: "Select the county this shop is in" });
+
+  const existing = await prisma.agrovetAccount.findUnique({ where: { nationalId: data.ownerNationalId } });
+  if (existing) {
+    return res.status(409).json({ error: "An agrovet account already exists for this owner's National ID" });
+  }
+
+  const now = new Date();
+  const shop = await prisma.agrovetShop.create({
+    data: {
+      name: data.shopName,
+      ownerName: data.ownerName,
+      phoneNumber: data.phoneNumber,
+      email: data.email,
+      physicalAddress: data.physicalAddress,
+      countyId,
+      subCounty: data.subCounty || req.user.subCounty || undefined,
+      reimbursementMsisdn: data.reimbursementMsisdn,
+      status: "REVIEWED",
+      reviewedById: req.user.id,
+      reviewedAt: now,
+      registeredById: req.user.id,
+      account: {
+        create: {
+          nationalId: data.ownerNationalId,
+          phoneNumber: data.phoneNumber,
+          email: data.email,
+          passwordHash: await bcrypt.hash(data.temporaryPassword, 10),
+        },
+      },
+    },
+  });
+
+  await recordAudit({
+    userId: req.user.id,
+    action: "REGISTER_AGROVET",
+    entityType: "AgrovetShop",
+    entityId: shop.id,
+    metadata: { countyId, ownerNationalId: data.ownerNationalId },
+  });
+
+  res.status(201).json(shop);
+}
+
+module.exports = { registerAgrovet, listAgrovets, getAgrovet, reviewAgrovet, approveAgrovet, suspendAgrovet };

@@ -21,7 +21,10 @@ async function authenticate(req, res, next) {
     // adding a new tier's token type later (as "agrovet" just was) can
     // never silently fall through this check by omission the way an
     // incomplete deny-list would.
-    if (payload.type !== "staff") {
+    // Positive allow-list: only the two User-backed token types get past
+    // this point. Farmer ("member") and agrovet tokens are rejected here,
+    // as are any token types added in future.
+    if (payload.type !== "staff" && payload.type !== "cooperative") {
       return res.status(401).json({ error: "Invalid token type for this endpoint" });
     }
     const user = await prisma.user.findUnique({
@@ -31,6 +34,14 @@ async function authenticate(req, res, next) {
 
     if (!user || !user.active) {
       return res.status(401).json({ error: "Account not found or deactivated" });
+    }
+
+    // The token type must match the account's role: Cooperative Managers only
+    // via a "cooperative" token (Cooperative Portal), everyone else only via
+    // a "staff" token (staff login). Neither can be swapped for the other.
+    const expectedType = user.role === "COOPERATIVE_MANAGER" ? "cooperative" : "staff";
+    if (payload.type !== expectedType) {
+      return res.status(401).json({ error: "Invalid token type for this account" });
     }
 
     req.user = user;

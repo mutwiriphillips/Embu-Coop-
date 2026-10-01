@@ -114,7 +114,7 @@ async function main() {
   console.log("  County Director (Embu):    director@embu.go.ke");
   console.log("  Sub-County Officer (Embu): subcounty@embu.go.ke");
   console.log("  Field Officer:             employee@embu.go.ke");
-  console.log("  Cooperative Manager:       manager@embu.go.ke");
+  console.log("  Cooperative Manager:       manager@embu.go.ke or EMB-PILOT-0001 at /cooperative/login");
   console.log("  Farmer (Member Portal):    National ID \"PILOT-0001\" at /member/login");
   console.log("  Agrovet (Agrovet Portal):  National ID \"AGRO-0001\" at /agrovet/login");
 }

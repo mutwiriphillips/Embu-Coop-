@@ -95,8 +95,20 @@ async function createCooperative(req, res) {
   res.status(201).json(coop);
 }
 
+// Fields only county staff may change. A Cooperative Manager can update their
+// society's name, sub-county and ward, but not its county (which decides who
+// oversees it), registration number, value chain (which drives credit
+// scoring), or who its manager is.
+const STAFF_ONLY_COOP_FIELDS = ["countyId", "registrationNumber", "valueChain", "managerId"];
+
 async function updateCooperative(req, res) {
   const data = coopSchema.partial().parse(req.body);
+  if (req.user.role === "COOPERATIVE_MANAGER") {
+    const blocked = STAFF_ONLY_COOP_FIELDS.filter((f) => f in data);
+    if (blocked.length) {
+      return res.status(403).json({ error: `Only county staff can change: ${blocked.join(", ")}` });
+    }
+  }
   const coop = await prisma.cooperative.update({
     where: { id: req.params.id },
     data,
