@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "../context/AuthContext";
+import { cooperativeHome } from "../lib/portal";
 
+const STAFF_ONLY = ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER", "FIELD_OFFICER"];
 const LINKS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/cooperatives", label: "Cooperatives" },
-  { href: "/field-ops", label: "Field Visits" },
-  { href: "/leave", label: "Leave" },
+  { href: "/dashboard", label: "Dashboard", roles: STAFF_ONLY },
+  { href: "/cooperatives", label: "Cooperatives", roles: STAFF_ONLY },
+  { href: "/field-ops", label: "Field Visits", roles: STAFF_ONLY },
+  { href: "/leave", label: "Leave", roles: STAFF_ONLY },
   { href: "/disbursements", label: "Farmer Disbursements", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
   { href: "/agrovets", label: "Agrovet Shops", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
   { href: "/staff", label: "Staff & Access", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
@@ -17,6 +19,14 @@ const LINKS = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const isManager = user?.role === "COOPERATIVE_MANAGER";
+  // Cooperative Managers get their own short menu: their cooperative(s),
+  // nothing county-staff-only.
+  const links = isManager
+    ? (user?.managedCoops?.length
+        ? user.managedCoops.map((c) => ({ href: `/cooperatives/${c.id}`, label: c.name }))
+        : [{ href: cooperativeHome(user), label: "My Cooperative" }])
+    : LINKS.filter((l) => !l.roles || l.roles.includes(user?.role));
 
   return (
     <aside className="flex h-screen w-60 flex-col justify-between border-r border-gray-200 bg-white">
@@ -25,11 +35,13 @@ export default function Sidebar() {
         <div className="border-b border-gray-200 px-4 py-4">
           <p className="text-sm font-bold text-kenya-black">Republic of Kenya</p>
           <p className="text-xs text-gray-500">
-            {user?.role === "NATIONAL_ADMIN" ? "National Co-operatives Portal" : (user?.county?.name ? `${user.county.name} County` : "Cooperative Management")}
+            {isManager
+              ? "Cooperative Portal"
+              : user?.role === "NATIONAL_ADMIN" ? "National Co-operatives Portal" : (user?.county?.name ? `${user.county.name} County` : "Cooperative Management")}
           </p>
         </div>
         <nav className="p-2">
-          {LINKS.filter((l) => !l.roles || l.roles.includes(user?.role)).map((l) => (
+          {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}

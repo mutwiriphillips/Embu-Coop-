@@ -115,8 +115,9 @@ npm run dev                # http://localhost:3000
 All pilot accounts share the password `Pilot2026!`:
 - **National Admin:** admin@cooperatives.go.ke
 - **County Director (Embu):** director@embu.go.ke
+- **Sub-County Officer (Embu):** subcounty@embu.go.ke
 - **Field Officer:** employee@embu.go.ke
-- **Cooperative Manager:** manager@embu.go.ke
+- **Cooperative Manager (`/cooperative/login`):** manager@embu.go.ke, or registration number `EMB-PILOT-0001`
 - **Farmer (Member Portal, `/member/login`):** National ID `PILOT-0001`
 - **Agrovet shop owner (`/agrovet/login`):** National ID `AGRO-0001`
 

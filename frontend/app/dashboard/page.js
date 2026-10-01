@@ -3,12 +3,19 @@
 import { useEffect, useState } from "react";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import { useAuth } from "../../context/AuthContext";
+import { useRouter } from "next/navigation";
 import api from "../../lib/api";
+import { cooperativeHome } from "../../lib/portal";
 
 const CHAINS_SHOWN = ["COFFEE", "TEA", "DAIRY", "SUGARCANE", "SACCO", "FISHERIES"];
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  // The county dashboard isn't for Cooperative Managers; send them home.
+  useEffect(() => {
+    if (user?.role === "COOPERATIVE_MANAGER") router.replace(cooperativeHome(user));
+  }, [user, router]);
   const isNationalAdmin = user?.role === "NATIONAL_ADMIN";
 
   const [counties, setCounties] = useState([]);

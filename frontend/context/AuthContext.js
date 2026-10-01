@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import api from "../lib/api";
+import { setSessionPortal, sessionLoginPath, cooperativeHome } from "../lib/portal";
 
 const AuthContext = createContext(null);
 
@@ -28,21 +29,38 @@ export function AuthProvider({ children }) {
       const { data } = await api.post("/auth/login", { email, password });
       window.localStorage.setItem("embu_token", data.token);
       window.localStorage.setItem("embu_user", JSON.stringify(data.user));
+      setSessionPortal("staff");
       setUser(data.user);
       router.push("/dashboard");
     },
     [router]
   );
 
+  // Cooperative Portal sign-in: its own endpoint and its own token type. The
+  // identifier can be the manager's email or the cooperative's registration
+  // number. Lands the manager straight in their cooperative.
+  const cooperativeLogin = useCallback(
+    async (identifier, password) => {
+      const { data } = await api.post("/cooperative-auth/login", { identifier, password });
+      window.localStorage.setItem("embu_token", data.token);
+      window.localStorage.setItem("embu_user", JSON.stringify(data.user));
+      setSessionPortal("cooperative");
+      setUser(data.user);
+      router.push(cooperativeHome(data.user));
+    },
+    [router]
+  );
+
   const logout = useCallback(() => {
+    const target = sessionLoginPath();
     window.localStorage.removeItem("embu_token");
     window.localStorage.removeItem("embu_user");
     setUser(null);
-    router.push("/login");
+    router.push(target);
   }, [router]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, cooperativeLogin, logout }}>
       {children}
     </AuthContext.Provider>
   );

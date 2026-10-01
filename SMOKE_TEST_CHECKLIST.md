@@ -34,10 +34,19 @@ For each row: log in, confirm the dashboard loads, confirm the sidebar only show
 |---|---|---|---|
 | National Admin | `admin@cooperatives.go.ke` | National coverage table (47 counties, mostly empty except Embu) | "Staff & Access" visible, county selector present |
 | County Director | `director@embu.go.ke` | Embu-only dashboard, no county selector | "Staff & Access" visible, scoped to Embu |
+| Sub-County Officer | `subcounty@embu.go.ke` | Embu cooperatives open without any "Missing permission" error | "Staff & Access" visible (view only, no create form) |
 | Field Officer | `employee@embu.go.ke` | Embu cooperatives, read-mostly | No "Staff & Access" link |
-| Cooperative Manager | `manager@embu.go.ke` | Their one managed cooperative | No "Staff & Access" link |
+| Cooperative Manager (at `/cooperative/login`) | `manager@embu.go.ke` or `EMB-PILOT-0001` | Lands directly in their cooperative | Only their cooperative, no county-staff items |
 
-- [ ] All four logged in successfully
+- [ ] All five logged in successfully
+- [ ] As the Director, create a Sub-County Officer with only name, email,
+      password and role filled in, and confirm it succeeds and they can open
+      Cooperatives on first login
+- [ ] As the Director, create a Cooperative Manager and pick an unmanaged
+      cooperative, then confirm their Cooperatives list shows only that one and
+      it opens
+- [ ] The Staff & Access list shows no red "Not linked to a cooperative" or
+      "No permissions" warnings (if it does, run `npm run fix:staff-access`)
 - [ ] National Admin's county selector, when set to a county other than Embu, shows an empty/zero state (not an error) — this is expected, not a bug
 - [ ] Sidebar differences above all held as described
 
@@ -126,6 +135,26 @@ As Director or National Admin:
 - [ ] Submit a fresh application at `/agrovet/apply` (any county), and confirm
       it appears as PENDING for a Sub-County Officer / Director in that county
       and **does not** appear for the Embu Director if it's another county
+
+## Phase 8c — Portals & Agrovet Registration (10 minutes)
+
+- [ ] Homepage: "Sign In" in the header jumps to four portal cards (Farmers,
+      Cooperatives, Agrovet Shops, County Staff); on a phone they stack in one
+      column with nothing overlapping
+- [ ] `/cooperative/login`: type `emb-pilot-0001` and see "✓ Kirimiri Coffee
+      Growers Cooperative Society · Embu County" appear before signing in
+- [ ] Sign in with `EMB-PILOT-0001` + `Pilot2026!` and land directly inside
+      the cooperative; repeat with `manager@embu.go.ke`
+- [ ] Sign in as the manager at the staff `/login` instead, and confirm you are
+      taken into the Cooperative Portal anyway
+- [ ] As the manager: no "+ New Cooperative" button, no Dashboard/Field
+      Visits/Leave in the menu; sign out returns to `/cooperative/login`
+- [ ] As `subcounty@embu.go.ke`: Agrovet Shops → "+ Register an agrovet shop",
+      fill it in with a new National ID and a temporary password, and confirm it
+      appears as REVIEWED with "Registered by" showing the officer
+- [ ] Sign in at `/agrovet/login` as that new owner: the shop shows as awaiting
+      Director sign-off and cannot record collections
+- [ ] As `director@embu.go.ke`, approve it; the owner can now trade
 
 ## Phase 9 — Access-Control Boundaries (10 minutes — the most important phase)
 

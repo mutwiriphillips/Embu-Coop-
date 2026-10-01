@@ -11,6 +11,45 @@ const HERO_IMG = "https://commons.wikimedia.org/wiki/Special:FilePath/Cycling_in
 const COAT_OF_ARMS_IMG = "https://commons.wikimedia.org/wiki/Special:FilePath/Coat_of_arms_of_Kenya.svg?width=140";
 const COUNTY_MAP_IMG = "https://commons.wikimedia.org/wiki/Special:FilePath/Kenya_county_map_labelled_with_names.svg?width=700";
 
+const PORTALS = [
+  {
+    key: "farmer",
+    title: "Farmers",
+    body: "See your contributions, deliveries, payouts, and input credit.",
+    signInWith: "National ID",
+    signIn: "/member/login",
+    secondary: { href: "/member/register", label: "Register as a farmer" },
+    accent: "border-t-kenya-red",
+  },
+  {
+    key: "cooperative",
+    title: "Cooperatives",
+    body: "Run your society: members, produce, payouts, documents, and elections.",
+    signInWith: "Email or registration number",
+    signIn: "/cooperative/login",
+    note: "Accounts are created by your County Co-operative Office.",
+    accent: "border-t-kenya-green",
+  },
+  {
+    key: "agrovet",
+    title: "Agrovet Shops",
+    body: "Supply farmers against their input credit and track your reimbursements.",
+    signInWith: "Owner's National ID",
+    signIn: "/agrovet/login",
+    secondary: { href: "/agrovet/apply", label: "Apply to join" },
+    accent: "border-t-kenya-gold",
+  },
+  {
+    key: "staff",
+    title: "County Staff",
+    body: "Directors, Sub-County Officers, and Field Officers.",
+    signInWith: "Work email",
+    signIn: "/login",
+    secondary: { href: "/signup", label: "Test-run signup" },
+    accent: "border-t-kenya-black",
+  },
+];
+
 const MODULES = [
   {
     title: "Staff & Access Management",
@@ -63,12 +102,12 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2 md:gap-3">
-          <Link
-            href="/login"
+          <a
+            href="#portals"
             className="rounded-md border border-kenya-green px-2.5 py-1.5 text-xs font-semibold text-kenya-green hover:bg-kenya-green/5 md:px-4 md:py-2 md:text-sm"
           >
-            Staff Sign In
-          </Link>
+            Sign In
+          </a>
           <Link
             href="/signup"
             className="rounded-md bg-kenya-green px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-kenya-green/90 md:px-4 md:py-2 md:text-sm"
@@ -110,6 +149,9 @@ export default function LandingPage() {
             >
               Already registered? Sign in
             </Link>
+            <a href="#portals" className="text-center text-xs font-medium text-gray-300 underline">
+              Cooperative, agrovet, or county staff? Choose your portal ↓
+            </a>
           </div>
         </div>
       </section>
@@ -136,6 +178,36 @@ export default function LandingPage() {
                 Farmer Sign In
               </Link>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Portal chooser: every audience gets its own clearly labelled door.
+          Normal document flow and a simple responsive grid (1 / 2 / 4
+          columns), so nothing can overlap on a narrow phone. */}
+      <section id="portals" className="scroll-mt-4 bg-gray-50 px-5 py-10 sm:px-6 md:px-12 md:py-14">
+        <div className="mx-auto max-w-6xl">
+          <h2 className="text-xl font-bold text-kenya-black sm:text-2xl">Sign in to your portal</h2>
+          <p className="mt-1 text-sm text-gray-600">Each portal has its own secure sign-in. Choose the one that fits you.</p>
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {PORTALS.map((p) => (
+              <div key={p.key} className={`flex flex-col rounded-xl border border-gray-200 border-t-4 ${p.accent} bg-white p-5 shadow-sm`}>
+                <h3 className="text-base font-bold text-kenya-black">{p.title}</h3>
+                <p className="mt-1 text-sm text-gray-600">{p.body}</p>
+                <p className="mt-2 text-xs text-gray-500">Sign in with: <span className="font-medium text-gray-700">{p.signInWith}</span></p>
+                <div className="mt-4 flex flex-col gap-2 pt-1 sm:mt-auto">
+                  <Link href={p.signIn} className="rounded-md bg-kenya-green px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-kenya-green/90">
+                    Sign in
+                  </Link>
+                  {p.secondary && (
+                    <Link href={p.secondary.href} className="rounded-md border border-kenya-green px-4 py-2.5 text-center text-sm font-semibold text-kenya-green hover:bg-kenya-green/5">
+                      {p.secondary.label}
+                    </Link>
+                  )}
+                  {p.note && <p className="text-center text-xs text-gray-400">{p.note}</p>}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -192,24 +264,14 @@ export default function LandingPage() {
           never competing with the header or hero for space. */}
       <footer className="border-t border-gray-100 px-5 py-8 text-center text-xs text-gray-400 sm:px-6 md:px-12">
         <p className="text-sm">
-          <span className="text-gray-500">Are you a farmer? </span>
-          <Link href="/member/login" className="font-medium text-kenya-green hover:underline">
-            Sign in
-          </Link>
+          <span className="text-gray-500">Sign in: </span>
+          <Link href="/member/login" className="font-medium text-kenya-green hover:underline">Farmer</Link>
           <span className="text-gray-400"> · </span>
-          <Link href="/member/register" className="font-medium text-kenya-green hover:underline">
-            Register
-          </Link>
-        </p>
-        <p className="mt-3 text-sm">
-          <span className="text-gray-500">Run an agrovet shop? </span>
-          <Link href="/agrovet/login" className="font-medium text-kenya-green hover:underline">
-            Sign in
-          </Link>
+          <Link href="/cooperative/login" className="font-medium text-kenya-green hover:underline">Cooperative</Link>
           <span className="text-gray-400"> · </span>
-          <Link href="/agrovet/apply" className="font-medium text-kenya-green hover:underline">
-            Apply to join
-          </Link>
+          <Link href="/agrovet/login" className="font-medium text-kenya-green hover:underline">Agrovet</Link>
+          <span className="text-gray-400"> · </span>
+          <Link href="/login" className="font-medium text-kenya-green hover:underline">County Staff</Link>
         </p>
         <p className="mt-4">
           <Link href="/privacy" className="font-medium text-kenya-green hover:underline">

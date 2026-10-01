@@ -4,13 +4,14 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "./Sidebar";
+import { sessionLoginPath } from "../lib/portal";
 
 export default function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
+    if (!loading && !user) router.replace(sessionLoginPath());
   }, [user, loading, router]);
 
   if (loading || !user) {

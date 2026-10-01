@@ -88,6 +88,7 @@ You should see (on a database that doesn't have them yet):
 Pilot seed complete. All accounts share the password: Pilot2026!
   National Admin: admin@cooperatives.go.ke
   County Director (Embu): director@embu.go.ke
+  Sub-County Officer (Embu): subcounty@embu.go.ke
   Employee (Field Officer): employee@embu.go.ke
   Manager: manager@embu.go.ke
   Cooperative: Kirimiri Coffee Growers Cooperative Society (EMB-PILOT-0001) — Embu County
@@ -95,14 +96,48 @@ Pilot seed complete. All accounts share the password: Pilot2026!
   Agrovet Portal login: National ID "AGRO-0001", password "Pilot2026!" (at /agrovet/login)
 ```
 
+### Repairing staff accounts created before this fix
+
+Staff created on the Staff & Access page used to get no module permissions,
+and managers weren't linked to a cooperative. So a Sub-County Officer or
+Cooperative Manager could log in, then hit "Missing 'canView' permission"
+or "You do not manage this cooperative" on every page. New accounts are
+fixed automatically. For accounts already on the live database, run once:
+
+```bash
+npm run fix:staff-access
+```
+
+It adds role-default permissions only to accounts that have none, never
+changes permissions a Director set, and lists any manager who isn't linked
+to a cooperative (assign them on Staff & Access). Safe to re-run.
+
+### Cooperative Portal and agrovet registration (this release)
+
+- **Cooperative Managers now sign in at `/cooperative/login`**, with their
+  email or their cooperative's registration number. They get their own token
+  type (`cooperative`), which the server only accepts for manager accounts;
+  staff tokens no longer work for managers, and cooperative tokens never
+  work for staff. If a manager types into the staff login out of habit, the
+  page hands them over to the Cooperative Portal automatically.
+- **Managers who were signed in before this deploy will be signed out once**
+  (their old session used the staff token type) and simply sign in again.
+- **Sub-County Officers can register agrovet shops** on the Agrovet Shops
+  page. These go straight to the Director for sign-off; nothing trades until
+  approved.
+- **Schema:** this release adds one nullable column (`AgrovetShop.registeredById`).
+  The normal Render build's `prisma db push` adds it without touching
+  existing data. Do **not** use `reset:all`.
+
 ### All pilot / test logins (password `Pilot2026!` for every one)
 
 | Role | Sign in at | Username field | Value |
 |---|---|---|---|
 | National Admin | `/login` | Email | `admin@cooperatives.go.ke` |
 | County Director (Embu) | `/login` | Email | `director@embu.go.ke` |
+| Sub-County Officer (Embu) | `/login` | Email | `subcounty@embu.go.ke` |
 | Field Officer | `/login` | Email | `employee@embu.go.ke` |
-| Cooperative Manager | `/login` | Email | `manager@embu.go.ke` |
+| Cooperative Manager | `/cooperative/login` | Email **or** registration number | `manager@embu.go.ke` or `EMB-PILOT-0001` |
 | Farmer (Member Portal) | `/member/login` | National ID | `PILOT-0001` |
 | Agrovet shop owner | `/agrovet/login` | National ID | `AGRO-0001` |
 

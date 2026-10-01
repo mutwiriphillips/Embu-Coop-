@@ -65,12 +65,14 @@ export default function CooperativesPage() {
     <ProtectedRoute>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Cooperative Registry</h1>
-        <button
-          onClick={() => setShowForm((s) => !s)}
-          className="rounded-md bg-kenya-green px-4 py-2 text-sm font-semibold text-white hover:bg-kenya-green/90"
-        >
-          {showForm ? "Cancel" : "+ New Cooperative"}
-        </button>
+        {user?.role !== "COOPERATIVE_MANAGER" && (
+          <button
+            onClick={() => setShowForm((s) => !s)}
+            className="rounded-md bg-kenya-green px-4 py-2 text-sm font-semibold text-white hover:bg-kenya-green/90"
+          >
+            {showForm ? "Cancel" : "+ New Cooperative"}
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -190,7 +192,9 @@ export default function CooperativesPage() {
             {cooperatives.length === 0 && (
               <tr>
                 <td colSpan={isNationalAdmin ? 6 : 5} className="px-4 py-6 text-center text-gray-400">
-                  No cooperatives found.
+                  {user?.role === "COOPERATIVE_MANAGER"
+                    ? "Your account isn't linked to a cooperative yet. Ask your County Co-operative Office to assign you on the Staff & Access page."
+                    : "No cooperatives found."}
                 </td>
               </tr>
             )}
