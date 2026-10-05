@@ -4,6 +4,10 @@ import { Fragment, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ProtectedRoute from "../../../components/ProtectedRoute";
 import api from "../../../lib/api";
+import { AuthedImage, openFile, useFileList, ACCEPT, HINT, formatBytes } from "../../../lib/files";
+
+// Documents and AGM papers store their file as "file:<id>" in storageKey.
+const fileIdOf = (key) => (typeof key === "string" && key.startsWith("file:") ? key.slice(5) : null);
 
 const ASSET_TRACKED_VALUE_CHAINS = ["LIVESTOCK", "POULTRY", "HOUSING", "TRANSPORT"];
 const BASE_TABS = ["Members", "Contributions", "Produce", "Input Credits", "Payouts", "Documents", "Governance", "AGM", "Credit Score"];
@@ -149,23 +153,31 @@ const DOC_TYPES = ["BY_LAWS", "MEETING_MINUTES", "CODE_OF_CONDUCT", "AUDIT_REPOR
 
 function DocumentsTab({ coop, onChange }) {
   const [form, setForm] = useState({ docType: "BY_LAWS", title: "" });
+  const [file, setFile] = useState(null);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
+  // The real file now goes up with the form (it used to send a made-up path
+  // and a fixed 1 KB size, and no file was ever stored).
   async function upload(e) {
     e.preventDefault();
     setError("");
+    if (!file) { setError("Choose the document file first."); return; }
+    setBusy(true);
     try {
-      // NOTE: storageKey/fileSizeBytes would normally come from a pre-signed
-      // upload step against object storage; stubbed here for the scaffold.
-      await api.post(`/cooperatives/${coop.id}/documents`, {
-        ...form,
-        storageKey: `docs/${coop.id}/${Date.now()}-${form.title.replace(/\s+/g, "_")}.pdf`,
-        fileSizeBytes: 1024,
-      });
+      const data = new FormData();
+      data.append("docType", form.docType);
+      data.append("title", form.title);
+      data.append("file", file);
+      await api.post(`/cooperatives/${coop.id}/documents`, data);
       setForm({ docType: "BY_LAWS", title: "" });
+      setFile(null);
+      e.target.reset();
       onChange();
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to upload document");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -188,9 +200,14 @@ function DocumentsTab({ coop, onChange }) {
         </select>
         <input required placeholder="Document title" className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
           value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white">
-          Upload
+        <button type="submit" disabled={busy} className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          {busy ? "Uploading…" : "Upload"}
         </button>
+        <div className="col-span-2 md:col-span-4">
+          <input required type="file" accept={ACCEPT.document} onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-kenya-green/10 file:px-3 file:py-1.5 file:text-kenya-green" />
+          <p className="mt-1 text-xs text-gray-400">{HINT.document}. Every upload waits for Sub-County review and Director sign-off.</p>
+        </div>
       </form>
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
@@ -207,7 +224,18 @@ function DocumentsTab({ coop, onChange }) {
           <tbody>
             {(coop.documents || []).map((d) => (
               <tr key={d.id} className="border-t border-gray-100">
-                <td className="px-4 py-2 font-medium">{d.title}</td>
+                <td className="px-4 py-2 font-medium">
+                  {d.title}
+                  <div className="text-xs font-normal">
+                    {fileIdOf(d.storageKey) ? (
+                      <button onClick={() => openFile(api, fileIdOf(d.storageKey))} className="text-kenya-green hover:underline">
+                        View file ({formatBytes(d.fileSizeBytes)})
+                      </button>
+                    ) : (
+                      <span className="text-gray-400">No file stored (recorded before uploads were enabled)</span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-2">{d.docType.replace(/_/g, " ")}</td>
                 <td className="px-4 py-2">
                   <StatusBadge status={d.status} />
@@ -383,19 +411,32 @@ function OverrideForm({ onOverride }) {
 
 function AGMTab({ coop, onChange }) {
   const [form, setForm] = useState({ agmType: "ANNUAL", meetingDate: "" });
+  const [notice, setNotice] = useState(null);
+  const [minutes, setMinutes] = useState(null);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
+  // An AGM can be recorded with its notice letter (and minutes, if the
+  // meeting has already happened); either can also be added afterwards.
   async function record(e) {
     e.preventDefault();
-    setError("");
+    setError(""); setBusy(true);
     try {
-      await api.post(`/cooperatives/${coop.id}/governance/agms`, form);
+      const data = new FormData();
+      data.append("agmType", form.agmType);
+      data.append("meetingDate", form.meetingDate);
+      if (notice) data.append("notice", notice);
+      if (minutes) data.append("minutes", minutes);
+      await api.post(`/cooperatives/${coop.id}/governance/agms`, data);
       setForm({ agmType: "ANNUAL", meetingDate: "" });
+      setNotice(null); setMinutes(null); e.target.reset();
       onChange();
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to record AGM");
-    }
+    } finally { setBusy(false); }
   }
+
+  const fileInput = "block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-kenya-green/10 file:px-3 file:py-1.5 file:text-kenya-green";
 
   return (
     <div>
@@ -407,20 +448,62 @@ function AGMTab({ coop, onChange }) {
         </select>
         <input required type="date" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
           value={form.meetingDate} onChange={(e) => setForm({ ...form, meetingDate: e.target.value })} />
-        <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white">
-          Record AGM
+        <button type="submit" disabled={busy} className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 md:col-span-2">
+          {busy ? "Saving…" : "Record AGM"}
         </button>
+        <label className="col-span-2 text-xs text-gray-600">Letter calling the AGM (optional)
+          <input type="file" accept={ACCEPT.document} onChange={(e) => setNotice(e.target.files?.[0] || null)} className={`mt-1 ${fileInput}`} />
+        </label>
+        <label className="col-span-2 text-xs text-gray-600">Signed minutes (optional, or add after the meeting)
+          <input type="file" accept={ACCEPT.document} onChange={(e) => setMinutes(e.target.files?.[0] || null)} className={`mt-1 ${fileInput}`} />
+        </label>
+        <p className="col-span-2 text-xs text-gray-400 md:col-span-4">{HINT.document}</p>
       </form>
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
       <div className="space-y-2">
-        {(coop.agms || []).map((a) => (
-          <div key={a.id} className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
-            <span className="font-medium">{a.agmType}</span> — {new Date(a.meetingDate).toLocaleDateString()}
-          </div>
-        ))}
+        {(coop.agms || []).map((a) => <AGMRow key={a.id} coop={coop} agm={a} onChange={onChange} />)}
         {(coop.agms || []).length === 0 && <p className="text-gray-400">No AGMs recorded yet.</p>}
       </div>
+    </div>
+  );
+}
+
+function AGMRow({ coop, agm, onChange }) {
+  const noticeId = fileIdOf(agm.noticeStorageKey);
+  const minutesId = fileIdOf(agm.minutesStorageKey);
+  const [msg, setMsg] = useState("");
+
+  async function attach(field, file) {
+    if (!file) return;
+    setMsg("");
+    try {
+      const data = new FormData();
+      data.append(field, file);
+      await api.post(`/cooperatives/${coop.id}/governance/agms/${agm.id}/files`, data);
+      onChange();
+    } catch (err) {
+      setMsg(err?.response?.data?.error || "Upload failed");
+    }
+  }
+
+  const doc = (id, label, field) => id ? (
+    <button onClick={() => openFile(api, id)} className="text-xs font-medium text-kenya-green hover:underline">View {label}</button>
+  ) : (
+    <label className="cursor-pointer text-xs font-medium text-gray-500 hover:text-kenya-green">
+      + Add {label}
+      <input type="file" accept={ACCEPT.document} className="hidden" onChange={(e) => attach(field, e.target.files?.[0])} />
+    </label>
+  );
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white p-3 text-sm">
+      <span><span className="font-medium">{agm.agmType}</span> — {new Date(agm.meetingDate).toLocaleDateString()}</span>
+      <span className="flex items-center gap-4">
+        {doc(noticeId, "notice", "notice")}
+        {doc(minutesId, "minutes", "minutes")}
+      </span>
+      {msg && <p className="w-full text-xs text-red-600">{msg}</p>}
     </div>
   );
 }
@@ -689,6 +772,44 @@ const ASSET_STATUS_LABELS = {
   WRITTEN_OFF: "Written Off",
 };
 
+// Photos of one asset (the cow, the boda boda, the housing unit), shown and
+// added inside the asset's expanded row.
+function AssetPhotos({ coopId, assetId }) {
+  const { files, reload } = useFileList(api, { assetId }, [assetId]);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function add(list) {
+    if (!list?.length) return;
+    setMsg(""); setBusy(true);
+    try {
+      const data = new FormData();
+      Array.from(list).slice(0, 5).forEach((f) => data.append("photos", f));
+      await api.post(`/cooperatives/${coopId}/assets/${assetId}/photos`, data);
+      reload();
+    } catch (err) {
+      setMsg(err?.response?.data?.error || "Upload failed");
+    } finally { setBusy(false); }
+  }
+  return (
+    <div className="mt-3 border-t border-gray-200 pt-3">
+      <p className="mb-2 text-xs font-semibold text-gray-600">Photos</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {files.map((f) => (
+          <button key={f.id} onClick={() => openFile(api, f.id)} title={f.fileName}>
+            <AuthedImage client={api} fileId={f.id} alt="Asset photo" className="h-16 w-20 rounded" />
+          </button>
+        ))}
+        <label className="flex h-16 w-20 cursor-pointer flex-col items-center justify-center rounded border border-dashed border-gray-300 text-center text-[10px] text-gray-500 hover:border-kenya-green hover:text-kenya-green">
+          {busy ? "Uploading…" : "+ Add photos"}
+          <input type="file" multiple accept={ACCEPT.photo} className="hidden" onChange={(e) => add(e.target.files)} />
+        </label>
+      </div>
+      <p className="mt-1 text-[11px] text-gray-400">{HINT.photo}, up to 5 at a time</p>
+      {msg && <p className="mt-1 text-xs text-red-600">{msg}</p>}
+    </div>
+  );
+}
+
 function AssetsTab({ coop }) {
   const suggestion = ASSET_TYPE_SUGGESTIONS[coop.valueChain];
   const [assets, setAssets] = useState([]);
@@ -868,6 +989,7 @@ function AssetsTab({ coop }) {
                           Save Event
                         </button>
                       </div>
+                      <AssetPhotos coopId={coop.id} assetId={a.id} />
                     </td>
                   </tr>
                 )}

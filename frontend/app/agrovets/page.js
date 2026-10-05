@@ -5,6 +5,8 @@ import Link from "next/link";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../lib/api";
+import LocationPicker from "../../components/LocationPicker";
+import { ACCEPT, HINT } from "../../lib/files";
 
 const STATUS_BADGE = {
   PENDING: "bg-amber-100 text-amber-800",
@@ -21,17 +23,26 @@ export default function AgrovetsPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [showRegister, setShowRegister] = useState(false);
-  const EMPTY = { shopName: "", ownerName: "", ownerNationalId: "", phoneNumber: "", email: "", physicalAddress: "", subCounty: "", reimbursementMsisdn: "", temporaryPassword: "", countyId: "" };
+  const EMPTY = { shopName: "", ownerName: "", ownerNationalId: "", phoneNumber: "", email: "", physicalAddress: "", subCountyId: "", wardId: "", reimbursementMsisdn: "", temporaryPassword: "", countyId: "" };
+  const [regPhoto, setRegPhoto] = useState(null);
+  const [regPermit, setRegPermit] = useState(null);
+  const [area, setArea] = useState({ subCountyId: "", wardId: "" });
   const [reg, setReg] = useState(EMPTY);
   const [counties, setCounties] = useState([]);
 
   function load() {
     api
-      .get("/agrovets", { params: statusFilter ? { status: statusFilter } : {} })
+      .get("/agrovets", {
+        params: {
+          ...(statusFilter ? { status: statusFilter } : {}),
+          ...(area.subCountyId ? { subCountyId: area.subCountyId } : {}),
+          ...(area.wardId ? { wardId: area.wardId } : {}),
+        },
+      })
       .then((res) => setShops(res.data))
       .catch((err) => setError(err?.response?.data?.error || "Failed to load agrovet shops"));
   }
-  useEffect(load, [statusFilter]);
+  useEffect(load, [statusFilter, area.subCountyId, area.wardId]);
 
   const canRegister = ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"].includes(user?.role);
   useEffect(() => {
@@ -45,8 +56,13 @@ export default function AgrovetsPage() {
     e.preventDefault();
     setError(""); setNotice("");
     try {
-      const payload = Object.fromEntries(Object.entries(reg).filter(([, v]) => v !== ""));
+      // One multipart form, so the shop photo and permit go with the registration.
+      const payload = new FormData();
+      Object.entries(reg).forEach(([k, v]) => { if (v !== "") payload.append(k, v); });
+      if (regPhoto) payload.append("shopPhoto", regPhoto);
+      if (regPermit) payload.append("permit", regPermit);
       await api.post("/agrovets", payload);
+      setRegPhoto(null); setRegPermit(null);
       setNotice(
         `${reg.shopName} registered and sent to the Director for sign-off. ` +
         `Give the owner their sign-in: National ID ${reg.ownerNationalId} with the temporary password you set, at /agrovet/login.`
@@ -112,15 +128,28 @@ export default function AgrovetsPage() {
               value={reg.email} onChange={(e) => setReg({ ...reg, email: e.target.value })} />
             <input required placeholder="Physical address / market" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
               value={reg.physicalAddress} onChange={(e) => setReg({ ...reg, physicalAddress: e.target.value })} />
-            <input placeholder="Sub-County (optional)" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-              value={reg.subCounty} onChange={(e) => setReg({ ...reg, subCounty: e.target.value })} />
+            <LocationPicker
+              required
+              countyId={user?.role === "NATIONAL_ADMIN" ? reg.countyId : user?.countyId}
+              lockedSubCountyId={user?.role === "SUBCOUNTY_OFFICER" ? user?.subCountyId : undefined}
+              value={{ subCountyId: reg.subCountyId, wardId: reg.wardId }}
+              onChange={(loc) => setReg({ ...reg, subCountyId: loc.subCountyId, wardId: loc.wardId })}
+              selectClassName="rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+            />
+            <label className="text-xs text-gray-600">Shop photo (optional)
+              <input type="file" accept={ACCEPT.photo} onChange={(e) => setRegPhoto(e.target.files?.[0] || null)} className="mt-1 block w-full text-xs" />
+            </label>
+            <label className="text-xs text-gray-600">Business permit (optional)
+              <input type="file" accept={ACCEPT.document} onChange={(e) => setRegPermit(e.target.files?.[0] || null)} className="mt-1 block w-full text-xs" />
+              <span className="text-gray-400">{HINT.document}</span>
+            </label>
             <input placeholder="Reimbursement M-Pesa number (optional)" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
               value={reg.reimbursementMsisdn} onChange={(e) => setReg({ ...reg, reimbursementMsisdn: e.target.value })} />
             <input required minLength={8} placeholder="Temporary password for the owner (8+)" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
               value={reg.temporaryPassword} onChange={(e) => setReg({ ...reg, temporaryPassword: e.target.value })} />
             {user?.role === "NATIONAL_ADMIN" && (
               <select required className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                value={reg.countyId} onChange={(e) => setReg({ ...reg, countyId: e.target.value })}>
+                value={reg.countyId} onChange={(e) => setReg({ ...reg, countyId: e.target.value, subCountyId: "", wardId: "" })}>
                 <option value="">Select county…</option>
                 {counties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -137,7 +166,17 @@ export default function AgrovetsPage() {
       )}
       {notice && <p className="mb-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">{notice}</p>}
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-3 flex flex-wrap gap-2">
+        <LocationPicker
+          allLabel
+          countyId={user?.role === "NATIONAL_ADMIN" ? undefined : user?.countyId}
+          lockedSubCountyId={user?.role === "SUBCOUNTY_OFFICER" ? user?.subCountyId : undefined}
+          value={area}
+          onChange={(loc) => setArea({ subCountyId: loc.subCountyId, wardId: loc.wardId })}
+          selectClassName="rounded-md border border-gray-300 px-3 py-1.5 text-xs disabled:bg-gray-50"
+        />
+      </div>
+      <div className="mb-4 flex flex-wrap gap-2">
         {["", "PENDING", "REVIEWED", "APPROVED", "REJECTED", "SUSPENDED"].map((s) => (
           <button
             key={s}

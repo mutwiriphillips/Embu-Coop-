@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useCounties, CountySelect } from "../../../lib/useCounties";
 import { useAgrovetAuth } from "../../../context/AgrovetAuthContext";
 import { describeAuthError } from "../../../lib/authErrors";
+import LocationPicker from "../../../components/LocationPicker";
+import { ACCEPT, HINT } from "../../../lib/files";
 
 export default function AgrovetApplyPage() {
   const { apply } = useAgrovetAuth();
@@ -16,19 +18,28 @@ export default function AgrovetApplyPage() {
     email: "",
     physicalAddress: "",
     countyId: "",
-    subCounty: "",
+    subCountyId: "",
+    wardId: "",
     reimbursementMsisdn: "",
     password: "",
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [shopPhoto, setShopPhoto] = useState(null);
+  const [permit, setPermit] = useState(null);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     setSubmitting(true);
     try {
-      await apply({ ...form, email: form.email || undefined, reimbursementMsisdn: form.reimbursementMsisdn || undefined });
+      // Sent as one multipart form so the shop photo and permit arrive with the
+      // application. Blank optional fields are simply left out.
+      const data = new FormData();
+      Object.entries(form).forEach(([k, v]) => { if (v !== "") data.append(k, v); });
+      if (shopPhoto) data.append("shopPhoto", shopPhoto);
+      if (permit) data.append("permit", permit);
+      await apply(data);
     } catch (err) {
       setError(describeAuthError(err, "Application failed. Check the details and try again."));
     } finally {
@@ -70,7 +81,7 @@ export default function AgrovetApplyPage() {
             <label className="mb-1 block text-sm font-medium">County</label>
             <CountySelect
                 value={form.countyId}
-                onChange={(e) => setForm({ ...form, countyId: e.target.value })}
+                onChange={(e) => setForm({ ...form, countyId: e.target.value, subCountyId: "", wardId: "" })}
                 counties={counties}
                 loading={countiesLoading}
                 error={countiesError}
@@ -79,7 +90,28 @@ export default function AgrovetApplyPage() {
               />
           </div>
 
-          {field("Sub-County (optional)", "subCounty", { required: false })}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2 -mb-2 text-sm font-medium">Sub-county and ward</div>
+            <LocationPicker
+              required
+              countyId={form.countyId}
+              value={{ subCountyId: form.subCountyId, wardId: form.wardId }}
+              onChange={(loc) => setForm({ ...form, subCountyId: loc.subCountyId, wardId: loc.wardId })}
+            />
+            <p className="sm:col-span-2 -mt-1 text-xs text-gray-500">Your application goes to the Sub-County Officer for this area.</p>
+          </div>
+
+          <div className="rounded-md border border-dashed border-gray-300 p-3">
+            <p className="mb-2 text-sm font-medium">Photos &amp; documents <span className="font-normal text-gray-500">(optional, but they speed up approval)</span></p>
+            <label className="mb-1 block text-xs font-medium text-gray-700">Photo of your shop front</label>
+            <input type="file" accept={ACCEPT.photo} onChange={(e) => setShopPhoto(e.target.files?.[0] || null)}
+              className="mb-1 block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-kenya-green/10 file:px-3 file:py-1.5 file:text-kenya-green" />
+            <p className="mb-3 text-xs text-gray-400">{HINT.photo}</p>
+            <label className="mb-1 block text-xs font-medium text-gray-700">Business permit / licence</label>
+            <input type="file" accept={ACCEPT.document} onChange={(e) => setPermit(e.target.files?.[0] || null)}
+              className="mb-1 block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-kenya-green/10 file:px-3 file:py-1.5 file:text-kenya-green" />
+            <p className="text-xs text-gray-400">{HINT.document}. You can also add these later from your portal.</p>
+          </div>
           {field("Reimbursement M-Pesa Number (optional)", "reimbursementMsisdn", {
             required: false,
             placeholder: "Till, paybill, or phone for reimbursement — can be added later",

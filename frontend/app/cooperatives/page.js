@@ -5,6 +5,7 @@ import Link from "next/link";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../lib/api";
+import LocationPicker from "../../components/LocationPicker";
 
 const VALUE_CHAINS = [
   "COFFEE", "DAIRY", "MIRAA", "IRRIGATION", "TEA", "SUGARCANE", "COTTON",
@@ -15,18 +16,19 @@ const VALUE_CHAINS = [
 export default function CooperativesPage() {
   const { user } = useAuth();
   const isNationalAdmin = user?.role === "NATIONAL_ADMIN";
+  const isSubCountyOfficer = user?.role === "SUBCOUNTY_OFFICER";
 
   const [counties, setCounties] = useState([]);
   const [cooperatives, setCooperatives] = useState([]);
-  const [filters, setFilters] = useState({ q: "", valueChain: "", countyId: "" });
+  const [filters, setFilters] = useState({ q: "", valueChain: "", countyId: "", subCountyId: "", wardId: "" });
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     name: "",
     registrationNumber: "",
     valueChain: "COFFEE",
     countyId: "",
-    subCounty: "",
-    ward: "",
+    subCountyId: "",
+    wardId: "",
   });
   const [error, setError] = useState("");
 
@@ -39,6 +41,8 @@ export default function CooperativesPage() {
     if (filters.q) params.q = filters.q;
     if (filters.valueChain) params.valueChain = filters.valueChain;
     if (isNationalAdmin && filters.countyId) params.countyId = filters.countyId;
+    if (filters.subCountyId) params.subCountyId = filters.subCountyId;
+    if (filters.wardId) params.wardId = filters.wardId;
     const res = await api.get("/cooperatives", { params });
     setCooperatives(res.data);
   }
@@ -54,7 +58,7 @@ export default function CooperativesPage() {
     try {
       await api.post("/cooperatives", form);
       setShowForm(false);
-      setForm({ name: "", registrationNumber: "", valueChain: "COFFEE", countyId: "", subCounty: "", ward: "" });
+      setForm({ name: "", registrationNumber: "", valueChain: "COFFEE", countyId: "", subCountyId: "", wardId: "" });
       load();
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to create cooperative");
@@ -111,19 +115,13 @@ export default function CooperativesPage() {
               {counties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
-          <input
+          <LocationPicker
             required
-            placeholder="Sub-County"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-            value={form.subCounty}
-            onChange={(e) => setForm({ ...form, subCounty: e.target.value })}
-          />
-          <input
-            required
-            placeholder="Ward"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-            value={form.ward}
-            onChange={(e) => setForm({ ...form, ward: e.target.value })}
+            countyId={isNationalAdmin ? form.countyId : user?.countyId}
+            lockedSubCountyId={isSubCountyOfficer ? user?.subCountyId : undefined}
+            value={{ subCountyId: form.subCountyId, wardId: form.wardId }}
+            onChange={(loc) => setForm({ ...form, subCountyId: loc.subCountyId, wardId: loc.wardId })}
+            selectClassName="rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
           />
           <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white md:col-span-5">
             Save Cooperative
@@ -154,12 +152,22 @@ export default function CooperativesPage() {
           <select
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={filters.countyId}
-            onChange={(e) => setFilters({ ...filters, countyId: e.target.value })}
+            onChange={(e) => setFilters({ ...filters, countyId: e.target.value, subCountyId: "", wardId: "" })}
           >
             <option value="">All Counties</option>
             {counties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         )}
+        {/* Drill down by sub-county and ward. A Sub-County Officer is held to
+            their own sub-county (the server enforces this too). */}
+        <LocationPicker
+          allLabel
+          countyId={isNationalAdmin ? filters.countyId : user?.countyId}
+          lockedSubCountyId={isSubCountyOfficer ? user?.subCountyId : undefined}
+          value={{ subCountyId: filters.subCountyId, wardId: filters.wardId }}
+          onChange={(loc) => setFilters({ ...filters, subCountyId: loc.subCountyId, wardId: loc.wardId })}
+          selectClassName="rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+        />
       </div>
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">

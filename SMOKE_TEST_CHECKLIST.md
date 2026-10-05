@@ -156,6 +156,31 @@ As Director or National Admin:
       Director sign-off and cannot record collections
 - [ ] As `director@embu.go.ke`, approve it; the owner can now trade
 
+## Phase 8d — Sub-Counties, Wards & Uploads (15 minutes)
+
+- [ ] Backend Shell: `npm run geo:sync`; note anything it says it couldn't match
+- [ ] As the Director: Dashboard shows "Drill down by sub-county and ward"
+      with Embu's 4 sub-counties (Manyatta, Mbeere North, Mbeere South,
+      Runyenjes); click Runyenjes → its 6 wards; click Kagaari South → Kirimiri
+      Coffee, which opens
+- [ ] Cooperative Registry → New Cooperative: Sub-county then Ward dropdowns;
+      changing the sub-county clears the ward
+- [ ] Registry filters: pick a sub-county and ward; the list narrows
+- [ ] Staff & Access: creating a Sub-County Officer refuses to save without a
+      sub-county; any older officer without one shows in red with "Assign"
+- [ ] Sign in as `subcounty@embu.go.ke`: the registry and agrovet lists show
+      only their sub-county; their dropdowns are locked to it
+- [ ] Kirimiri → Documents: upload a PDF and a phone photo of a page; each gets
+      "View file"; try a renamed non-PDF file and confirm it's refused
+- [ ] AGM tab: record an AGM with a notice; later use "+ Add minutes"; both open
+- [ ] Assets tab (asset-tracked cooperatives): open an asset → add photos
+- [ ] `/agrovet/apply`: pick county → sub-county → ward, attach a shop photo
+      and permit; the right Sub-County Officer sees it and can open both
+- [ ] Field Visits: plan → authorise (by someone else) → the officer clicks
+      "File report", files it, adds a photo; the Director can read it and see it
+- [ ] As the Meru Director (if one exists): no Embu leave, visits, cooperatives,
+      staff, shops, or files appear anywhere
+
 ## Phase 9 — Access-Control Boundaries (10 minutes — the most important phase)
 
 This is what all the crafted-JWT testing earlier in the build proved *should*

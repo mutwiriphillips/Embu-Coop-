@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAgrovetAuth } from "../../../context/AgrovetAuthContext";
 import agrovetApi from "../../../lib/agrovetApi";
+import { AuthedImage, openFile, useFileList, ACCEPT, HINT, formatBytes } from "../../../lib/files";
 
 const CATEGORIES = ["SEEDS", "FERTILIZER", "MANURE", "PESTICIDE", "EQUIPMENT", "TOOLS", "OTHER"];
 const UNITS = ["KG", "BAG", "LITRE", "PIECE", "OTHER"];
@@ -45,6 +46,8 @@ export default function AgrovetDashboardPage() {
           {shop.status === "REJECTED" && shop.rejectionNote && <p className="mt-1 text-xs font-normal">Reason: {shop.rejectionNote}</p>}
         </div>
 
+        <ShopFilesPanel shopId={shop.shopId} />
+
         {isApproved && (
           <>
             <div className="mb-6 flex gap-2 border-b border-gray-200">
@@ -64,6 +67,68 @@ export default function AgrovetDashboardPage() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// Shop front photo and business permit. Available whatever the approval
+// status, since a permit may be what the reviewing officer is waiting for.
+function ShopFilesPanel({ shopId }) {
+  const { files, reload } = useFileList(agrovetApi, shopId ? { agrovetShopId: shopId } : null, [shopId]);
+  const [purpose, setPurpose] = useState("AGROVET_SHOP_PHOTO");
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const photos = files.filter((f) => f.purpose === "AGROVET_SHOP_PHOTO");
+  const permits = files.filter((f) => f.purpose === "AGROVET_PERMIT");
+
+  async function upload(e) {
+    e.preventDefault();
+    if (!file) return;
+    setBusy(true); setMsg("");
+    try {
+      const data = new FormData();
+      data.append("purpose", purpose);
+      data.append("file", file);
+      await agrovetApi.post("/agrovet/files", data);
+      setFile(null); e.target.reset(); setMsg("Uploaded."); reload();
+    } catch (err) {
+      setMsg(err?.response?.data?.error || "Upload failed");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+      <h2 className="mb-3 text-sm font-semibold text-kenya-black">Shop photo &amp; business permit</h2>
+      <div className="mb-3 flex flex-wrap gap-3">
+        {photos.map((f) => (
+          <button key={f.id} onClick={() => openFile(agrovetApi, f.id)} title={f.fileName}>
+            <AuthedImage client={agrovetApi} fileId={f.id} alt="Shop photo" className="h-24 w-32 rounded-md" />
+          </button>
+        ))}
+        {permits.map((f) => (
+          <button key={f.id} onClick={() => openFile(agrovetApi, f.id)}
+            className="flex h-24 w-32 flex-col items-center justify-center rounded-md border border-gray-200 bg-gray-50 p-2 text-center text-xs text-gray-700 hover:border-kenya-green">
+            <span className="font-semibold">Permit</span>
+            <span className="truncate w-full">{f.fileName}</span>
+            <span className="text-gray-400">{formatBytes(f.sizeBytes)}</span>
+          </button>
+        ))}
+        {files.length === 0 && <p className="text-sm text-gray-400">Nothing uploaded yet. A shop photo and permit help the County approve your shop faster.</p>}
+      </div>
+      <form onSubmit={upload} className="flex flex-wrap items-center gap-2">
+        <select value={purpose} onChange={(e) => setPurpose(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+          <option value="AGROVET_SHOP_PHOTO">Shop photo</option>
+          <option value="AGROVET_PERMIT">Business permit</option>
+        </select>
+        <input required type="file" accept={purpose === "AGROVET_PERMIT" ? ACCEPT.document : ACCEPT.photo}
+          onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-xs" />
+        <button disabled={busy || !file} className="rounded-md bg-kenya-green px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
+          {busy ? "Uploading…" : "Upload"}
+        </button>
+        <span className="text-xs text-gray-400">{purpose === "AGROVET_PERMIT" ? HINT.document : HINT.photo}</span>
+      </form>
+      {msg && <p className="mt-2 text-xs text-gray-600">{msg}</p>}
     </div>
   );
 }

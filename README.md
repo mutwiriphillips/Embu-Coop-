@@ -388,6 +388,43 @@ instead relied on a manual, bidirectional pairing check of all 16 new
 relations (every `@relation` has a matching reverse field, on both models
 it connects) plus the live wiring and access-control tests described above.
 
+## Geography, Area Scoping & File Uploads (Module 10)
+
+**County → Sub-County → Ward.** `SubCounty` (290, IEBC constituency codes) and
+`Ward` (1,450, IEBC ward codes) are reference tables loaded from
+`backend/src/data/kenyaGeography.js`. The data came from the kenya-regions
+dataset and was cross-checked against an independent IEBC compilation:
+identical totals, identical constituencies in every county, and 23 ward
+spelling variants kept as aliases. Four genuine name disagreements are listed
+in `DISPUTED_WARDS`. Cooperatives, staff, and agrovet shops carry
+`subCountyId` / `wardId` links **and** keep their text `subCounty` / `ward`
+fields, which the server fills in from the chosen dropdowns, so existing
+screens keep working. `resolveLocation()` rejects a ward from another
+sub-county or a sub-county from another county.
+
+After deploying, run `npm run geo:sync` once (see `RENDER_DEPLOYMENT.md`):
+it loads the reference data and links existing records, changing nothing else.
+
+**Who sees what** (`areaScope()` in `utils/geography.js`, applied in every
+list and every access check): National Admin → everything; Director and
+Field Officer → their county; Sub-County Officer → their sub-county.
+`GET /api/counties/:id/breakdown` drives the Director drill-down.
+
+**Uploads.** `StoredFile` keeps the file bytes in PostgreSQL, because Render's
+disk doesn't survive deploys. Type is sniffed from the content (PDF, JPEG,
+PNG, WEBP), not trusted from the filename or browser. Every file records what
+it belongs to, and `GET /api/files/:id` releases it only to people who may see
+that record: the cooperative's manager or the county staff covering its area,
+or the agrovet shop itself. Anyone else gets a 404, so file ids can't be
+probed.
+
+**Leaks closed in this module:** leave and field visits were visible and
+decidable across all counties; `/api/counties/summary` was public; visits
+could be planned for and reported on anywhere; documents never stored a file.
+
+Tested with 84 end-to-end HTTP checks plus the previous 52-check suite as a
+regression (all passing), and schema-validated with Prisma's own validator.
+
 ## Open Items From Scope (to confirm with County before Phase 2)
 
 See `docs/Embu_Coop_Engineering_Scope.pdf`, Section 6 — sub-county/ward list,

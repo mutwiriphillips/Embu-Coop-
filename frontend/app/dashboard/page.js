@@ -6,6 +6,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
 import { cooperativeHome } from "../../lib/portal";
+import CountyDrillDown from "../../components/CountyDrillDown";
 
 const CHAINS_SHOWN = ["COFFEE", "TEA", "DAIRY", "SUGARCANE", "SACCO", "FISHERIES"];
 
@@ -146,6 +147,15 @@ export default function DashboardPage() {
             </table>
           </div>
         </>
+      )}
+
+      {selectedCountyId && ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"].includes(user?.role) && (
+        <CountyDrillDown
+          key={selectedCountyId}
+          countyId={selectedCountyId}
+          countyName={counties.find((c) => c.id === selectedCountyId)?.name || user?.county?.name}
+          user={user}
+        />
       )}
     </ProtectedRoute>
   );

@@ -129,6 +129,52 @@ to a cooperative (assign them on Staff & Access). Safe to re-run.
   The normal Render build's `prisma db push` adds it without touching
   existing data. Do **not** use `reset:all`.
 
+### Sub-counties, wards and file uploads (this release)
+
+**After deploying, run once in the backend Shell:**
+
+```bash
+npm run geo:sync
+```
+
+It loads all 290 sub-counties and 1,450 wards, then links existing
+cooperatives, staff, and agrovet shops to them by matching the text they
+already have. It changes no existing text and never overwrites a link
+someone chose, and it lists anything it couldn't match so a Director can pick
+from the dropdowns. Safe to run again at any time. (Counties also load their
+own sub-counties and wards the first time anyone opens the dropdowns, so
+nothing breaks if this is skipped, but the old records stay unlinked.)
+
+**What changes for people:**
+- Every form that records a location now uses **County → Sub-County → Ward**
+  dropdowns. A Sub-County Officer **must** have a sub-county; they then see
+  only that sub-county. Officers created before this release see their whole
+  county until a Director assigns one (Staff & Access flags them in red with
+  an "Assign" dropdown).
+- The **Dashboard** has a drill-down: sub-county → ward → that ward's
+  cooperatives.
+- **Real uploads:** documents (PDF or a photo of the paper), AGM notices and
+  minutes, agrovet shop photo and business permit, asset photos, and
+  field-visit photos. Files are stored **in PostgreSQL**, because Render's
+  web-service disk is wiped on every deploy. Limits: 10 MB per document,
+  5 MB per photo. File types are checked from the file's content, not its
+  name.
+- **Database size:** uploads grow the database. Check the Postgres plan's
+  storage on the Render dashboard as usage builds, and upgrade the plan before
+  it fills.
+- Documents recorded **before** this release have no file (the old screen
+  never stored one). They're marked "No file stored"; re-upload any that
+  matter.
+- **Access tightened:** leave requests and field visits are now scoped to each
+  county (and sub-county); the national county summary needs a National Admin
+  sign-in; nobody approves their own leave or visit plan.
+
+**Four ward names to confirm** (two independent sources disagree on the
+name): Tana River / Bura "Bura" (or "Hirimani"), Mandera / Lafey "Libehia"
+(or "Sala"), Laikipia West "Kinamba" (or "Githiga"), West Pokot / Kacheliba
+"Kapckok" (or "Kapchok"). None are in the current eight pipeline counties.
+They're listed in `backend/src/data/kenyaGeography.js` → `DISPUTED_WARDS`.
+
 ### All pilot / test logins (password `Pilot2026!` for every one)
 
 | Role | Sign in at | Username field | Value |

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import ProtectedRoute from "../../../components/ProtectedRoute";
 import { useAuth } from "../../../context/AuthContext";
 import api from "../../../lib/api";
+import { AuthedImage, openFile, useFileList, ACCEPT, formatBytes } from "../../../lib/files";
 
 export default function AgrovetDetailPage() {
   const { id } = useParams();
@@ -48,12 +49,16 @@ export default function AgrovetDetailPage() {
     <ProtectedRoute>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">{shop.name}</h1>
-        <p className="text-sm text-gray-500">{shop.ownerName} · {shop.county?.name} County · {shop.physicalAddress}</p>
+        <p className="text-sm text-gray-500">
+          {shop.ownerName} · {shop.county?.name} County
+          {shop.subCounty ? ` · ${shop.subCounty}` : ""}{shop.ward ? ` / ${shop.ward}` : ""} · {shop.physicalAddress}
+        </p>
       </div>
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
       <div className="mb-8">
-        <h2 className="mb-3 text-lg font-semibold">Pending Reimbursement</h2>
+        <ShopFiles shopId={id} canUpload={["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"].includes(user?.role)} />
+        <h2 className="mb-3 mt-8 text-lg font-semibold">Pending Reimbursement</h2>
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
@@ -122,5 +127,59 @@ export default function AgrovetDetailPage() {
         </div>
       </div>
     </ProtectedRoute>
+  );
+}
+
+// The shop's photo and business permit, for the officer and Director deciding
+// whether to approve it. Staff covering the shop's area can add more.
+function ShopFiles({ shopId, canUpload }) {
+  const { files, reload } = useFileList(api, { agrovetShopId: shopId }, [shopId]);
+  const [purpose, setPurpose] = useState("AGROVET_PERMIT");
+  const [file, setFile] = useState(null);
+  const [msg, setMsg] = useState("");
+  async function upload(e) {
+    e.preventDefault();
+    if (!file) return;
+    setMsg("");
+    try {
+      const data = new FormData();
+      data.append("purpose", purpose);
+      data.append("file", file);
+      await api.post(`/agrovets/${shopId}/files`, data);
+      setFile(null); e.target.reset(); reload(); setMsg("Uploaded.");
+    } catch (err) {
+      setMsg(err?.response?.data?.error || "Upload failed");
+    }
+  }
+  return (
+    <div className="mb-2 rounded-lg border border-gray-200 bg-white p-4">
+      <h2 className="mb-3 text-lg font-semibold">Shop photo &amp; permit</h2>
+      <div className="flex flex-wrap gap-3">
+        {files.map((f) => f.purpose === "AGROVET_SHOP_PHOTO" ? (
+          <button key={f.id} onClick={() => openFile(api, f.id)} title={f.fileName}>
+            <AuthedImage client={api} fileId={f.id} alt="Shop photo" className="h-28 w-40 rounded-md" />
+          </button>
+        ) : (
+          <button key={f.id} onClick={() => openFile(api, f.id)}
+            className="flex h-28 w-40 flex-col items-center justify-center rounded-md border border-gray-200 bg-gray-50 p-2 text-xs hover:border-kenya-green">
+            <span className="font-semibold text-kenya-black">Business permit</span>
+            <span className="w-full truncate text-center">{f.fileName}</span>
+            <span className="text-gray-400">{formatBytes(f.sizeBytes)} · open</span>
+          </button>
+        ))}
+        {files.length === 0 && <p className="text-sm text-gray-400">No photo or permit on file. Ask the owner to add them from their portal, or upload them here.</p>}
+      </div>
+      {canUpload && (
+        <form onSubmit={upload} className="mt-3 flex flex-wrap items-center gap-2">
+          <select value={purpose} onChange={(e) => setPurpose(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+            <option value="AGROVET_PERMIT">Business permit</option>
+            <option value="AGROVET_SHOP_PHOTO">Shop photo</option>
+          </select>
+          <input required type="file" accept={purpose === "AGROVET_PERMIT" ? ACCEPT.document : ACCEPT.photo} onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-xs" />
+          <button disabled={!file} className="rounded-md bg-kenya-green px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40">Upload</button>
+          {msg && <span className="text-xs text-gray-600">{msg}</span>}
+        </form>
+      )}
+    </div>
   );
 }

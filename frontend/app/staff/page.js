@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../lib/api";
+import LocationPicker from "../../components/LocationPicker";
 
 const ROLES = ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER", "FIELD_OFFICER", "COOPERATIVE_MANAGER"];
 
@@ -14,7 +15,7 @@ export default function StaffPage() {
   const [counties, setCounties] = useState([]);
   const [form, setForm] = useState({
     fullName: "", email: "", password: "", role: "FIELD_OFFICER",
-    countyId: "", designation: "", phoneNumber: "", subCounty: "", ward: "",
+    countyId: "", designation: "", phoneNumber: "", subCountyId: "", wardId: "",
   });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -53,10 +54,25 @@ export default function StaffPage() {
       const payload = Object.fromEntries(Object.entries(form).filter(([, v]) => v !== ""));
       await api.post("/staff", payload);
       setNotice(`${form.fullName} created as ${form.role.replace(/_/g, " ")}. They can log in now.`);
-      setForm({ fullName: "", email: "", password: "", role: "FIELD_OFFICER", countyId: "", cooperativeId: "", designation: "", phoneNumber: "", subCounty: "", ward: "" });
+      setForm({ fullName: "", email: "", password: "", role: "FIELD_OFFICER", countyId: "", cooperativeId: "", designation: "", phoneNumber: "", subCountyId: "", wardId: "" });
       load();
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to create staff account");
+    }
+  }
+
+  // Give an existing Sub-County Officer their sub-county (officers created
+  // before sub-counties became dropdowns don't have one yet).
+  const [subAssign, setSubAssign] = useState({});
+  async function assignSubCounty(staffId) {
+    setError(""); setNotice("");
+    try {
+      await api.patch(`/staff/${staffId}`, { subCountyId: subAssign[staffId] });
+      setNotice("Sub-county assigned. That officer now sees only their sub-county.");
+      setSubAssign({ ...subAssign, [staffId]: "" });
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to assign sub-county");
     }
   }
 
@@ -126,10 +142,15 @@ export default function StaffPage() {
             value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} />
           <input placeholder="Phone" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={form.phoneNumber} onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })} />
-          <input placeholder="Sub-County" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-            value={form.subCounty} onChange={(e) => setForm({ ...form, subCounty: e.target.value })} />
-          <input placeholder="Ward" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-            value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })} />
+          {/* For a Sub-County Officer the sub-county is required: it decides
+              everything they can see. Optional for other roles. */}
+          <LocationPicker
+            required={form.role === "SUBCOUNTY_OFFICER"}
+            countyId={isNationalAdmin ? form.countyId : user?.countyId}
+            value={{ subCountyId: form.subCountyId, wardId: form.wardId }}
+            onChange={(loc) => setForm({ ...form, subCountyId: loc.subCountyId, wardId: loc.wardId })}
+            selectClassName="rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+          />
           <button type="submit" className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white md:col-span-4">
             Create Staff Account
           </button>
@@ -166,7 +187,27 @@ export default function StaffPage() {
                   )}
                 </td>
                 {isNationalAdmin && <td className="px-4 py-2">{s.county?.name || "—"}</td>}
-                <td className="px-4 py-2">{s.subCounty} / {s.ward}</td>
+                <td className="px-4 py-2">
+                  {s.subCounty || s.ward ? `${s.subCounty || "—"} / ${s.ward || "—"}` : "—"}
+                  {s.role === "SUBCOUNTY_OFFICER" && !s.subCountyId && (
+                    <div className="mt-1 text-xs font-medium text-kenya-red">
+                      No sub-county: sees the whole county until one is assigned
+                      {(isNationalAdmin || user?.role === "DIRECTOR") && (
+                        <div className="mt-1 flex gap-1">
+                          <LocationPicker
+                            showWard={false}
+                            countyId={s.countyId}
+                            value={{ subCountyId: subAssign[s.id] || "" }}
+                            onChange={(loc) => setSubAssign({ ...subAssign, [s.id]: loc.subCountyId })}
+                            selectClassName="rounded-md border border-gray-300 px-2 py-1 text-xs font-normal text-gray-800"
+                          />
+                          <button onClick={() => assignSubCounty(s.id)} disabled={!subAssign[s.id]}
+                            className="text-xs font-medium text-kenya-green hover:underline disabled:opacity-40">Assign</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-2">{s.active ? "Active" : "Deactivated"}</td>
                 {(user?.role === "NATIONAL_ADMIN" || user?.role === "DIRECTOR") && (
                   <td className="px-4 py-2">
