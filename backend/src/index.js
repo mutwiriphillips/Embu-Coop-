@@ -25,6 +25,7 @@ const memberRoutes = require("./routes/member");
 const inputCreditRoutes = require("./routes/inputCredits");
 const agrovetAuthRoutes = require("./routes/agrovetAuth");
 const cooperativeAuthRoutes = require("./routes/cooperativeAuth");
+const fileRoutes = require("./routes/files");
 const agrovetSelfRoutes = require("./routes/agrovetSelf");
 const agrovetRoutes = require("./routes/agrovets");
 const errorHandler = require("./middleware/errorHandler");
@@ -66,6 +67,7 @@ app.use("/api/member-auth", memberAuthRoutes);
 app.use("/api/member", memberRoutes);
 app.use("/api/agrovet-auth", agrovetAuthRoutes);
 app.use("/api/cooperative-auth", cooperativeAuthRoutes);
+app.use("/api/files", fileRoutes);
 app.use("/api/agrovet", agrovetSelfRoutes);
 app.use("/api/agrovets", agrovetRoutes);
 

@@ -1,8 +1,11 @@
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
+const { saveFile, toStorageKey, fileIdFromKey } = require("../utils/fileStorage");
+const { httpError } = require("../utils/geography");
 
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25MB default cap; confirm policy in Phase 1
+// File type and size rules live in utils/fileStorage.js (documents: PDF or a
+// photo of the paper, up to 10 MB).
 
 const uploadSchema = z.object({
   docType: z.enum([
@@ -14,8 +17,6 @@ const uploadSchema = z.object({
     "OTHER",
   ]),
   title: z.string().min(1),
-  storageKey: z.string().min(1), // returned by the object-storage upload step
-  fileSizeBytes: z.number().int().positive().max(MAX_FILE_SIZE_BYTES),
 });
 
 // GET /cooperatives/:id/documents?status=PENDING
@@ -33,16 +34,31 @@ async function listDocuments(req, res) {
     },
     orderBy: { createdAt: "desc" },
   });
-  res.json(documents);
+  // fileId lets the screen open the actual file through GET /api/files/:id.
+  // Documents recorded before real uploads existed have no file (fileId null).
+  res.json(documents.map((d) => ({ ...d, fileId: fileIdFromKey(d.storageKey) })));
 }
 
 // Any authenticated cooperative manager / field staff can upload; enters PENDING quarantine.
 async function uploadDocument(req, res) {
   const data = uploadSchema.parse(req.body);
+  // A document now always carries the real file (multipart field "file").
+  // Previously only a title and a storage-key string were saved and no file
+  // was ever kept.
+  if (!req.file) throw httpError(400, "Attach the document: a PDF or a clear photo of it");
+  const coop = req.cooperative;
+  const saved = await saveFile({
+    file: req.file,
+    purpose: "DOCUMENT",
+    scope: { countyId: coop.countyId, cooperativeId: coop.id },
+    uploadedByUserId: req.user.id,
+  });
 
   const document = await prisma.document.create({
     data: {
       ...data,
+      storageKey: toStorageKey(saved.id),
+      fileSizeBytes: saved.sizeBytes,
       cooperativeId: req.params.id,
       uploadedById: req.user.id,
       status: "PENDING",
@@ -56,7 +72,7 @@ async function uploadDocument(req, res) {
     entityId: document.id,
   });
 
-  res.status(201).json(document);
+  res.status(201).json({ ...document, fileId: saved.id, file: saved });
 }
 
 // Tier 1: Sub-county officer reviews (PENDING -> REVIEWED or REJECTED)

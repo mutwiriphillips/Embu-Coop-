@@ -2,17 +2,26 @@ const bcrypt = require("bcryptjs");
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
+const { resolveLocation, areaScope, httpError } = require("../utils/geography");
+const { saveFile, assertValidFile } = require("../utils/fileStorage");
 
 // GET /agrovets?status=PENDING&countyId=.. — county-scoped for everyone
 // except NATIONAL_ADMIN, enforced at the route level via the user's own
 // countyId (mirrors how the cooperative registry scopes itself).
 async function listAgrovets(req, res) {
-  const { status } = req.query;
-  const countyId = req.user.role === "NATIONAL_ADMIN" ? req.query.countyId : req.user.countyId;
+  const { status, subCountyId, wardId } = req.query;
+  // Director: their county. Sub-County Officer: their sub-county.
+  const scope = areaScope(req.user);
+  if (scope.subCountyId && subCountyId && subCountyId !== scope.subCountyId) {
+    throw httpError(403, "You can only view your own sub-county");
+  }
+  const countyId = scope.countyId || req.query.countyId;
 
   const shops = await prisma.agrovetShop.findMany({
     where: {
       ...(countyId ? { countyId } : {}),
+      ...(scope.subCountyId ? { subCountyId: scope.subCountyId } : subCountyId ? { subCountyId } : {}),
+      ...(wardId ? { wardId } : {}),
       ...(status ? { status } : {}),
     },
     include: {
@@ -121,6 +130,8 @@ const registerSchema = z.object({
   physicalAddress: z.string().min(1),
   countyId: blank(z.string().uuid().optional()),
   subCounty: blank(z.string().optional()),
+  subCountyId: blank(z.string().uuid().optional()),
+  wardId: blank(z.string().uuid().optional()),
   reimbursementMsisdn: blank(z.string().optional()),
   temporaryPassword: z.string().min(8),
 });
@@ -141,6 +152,20 @@ async function registerAgrovet(req, res) {
     return res.status(409).json({ error: "An agrovet account already exists for this owner's National ID" });
   }
 
+  const scope = areaScope(req.user);
+  const location = await resolveLocation({
+    countyId,
+    // A Sub-County Officer's shops are always in their own sub-county.
+    subCountyId: scope.subCountyId || data.subCountyId,
+    wardId: data.wardId,
+  });
+  if (!location.subCountyId || !location.wardId) throw httpError(400, "Choose the shop's sub-county and ward");
+
+  const shopPhoto = req.files?.shopPhoto?.[0];
+  const permit = req.files?.permit?.[0];
+  assertValidFile(shopPhoto, "AGROVET_SHOP_PHOTO");
+  assertValidFile(permit, "AGROVET_PERMIT");
+
   const now = new Date();
   const shop = await prisma.agrovetShop.create({
     data: {
@@ -150,7 +175,7 @@ async function registerAgrovet(req, res) {
       email: data.email,
       physicalAddress: data.physicalAddress,
       countyId,
-      subCounty: data.subCounty || req.user.subCounty || undefined,
+      ...location,
       reimbursementMsisdn: data.reimbursementMsisdn,
       status: "REVIEWED",
       reviewedById: req.user.id,
@@ -167,6 +192,10 @@ async function registerAgrovet(req, res) {
     },
   });
 
+  const fileScope = { countyId: shop.countyId, agrovetShopId: shop.id };
+  if (shopPhoto) await saveFile({ file: shopPhoto, purpose: "AGROVET_SHOP_PHOTO", scope: fileScope, uploadedByUserId: req.user.id });
+  if (permit) await saveFile({ file: permit, purpose: "AGROVET_PERMIT", scope: fileScope, uploadedByUserId: req.user.id });
+
   await recordAudit({
     userId: req.user.id,
     action: "REGISTER_AGROVET",
@@ -178,4 +207,14 @@ async function registerAgrovet(req, res) {
   res.status(201).json(shop);
 }
 
-module.exports = { registerAgrovet, listAgrovets, getAgrovet, reviewAgrovet, approveAgrovet, suspendAgrovet };
+// POST /agrovets/:id/files  (multipart: file, purpose)  staff add a shop photo
+// or permit for a shop in their area (access already checked by the route).
+async function uploadShopFile(req, res) {
+  const purpose = req.body.purpose;
+  if (!["AGROVET_SHOP_PHOTO", "AGROVET_PERMIT"].includes(purpose)) throw httpError(400, "Choose shop photo or business permit");
+  const shop = req.targetAgrovetShop;
+  const saved = await saveFile({ file: req.file, purpose, scope: { countyId: shop.countyId, agrovetShopId: shop.id }, uploadedByUserId: req.user.id });
+  res.status(201).json(saved);
+}
+
+module.exports = { uploadShopFile, registerAgrovet, listAgrovets, getAgrovet, reviewAgrovet, approveAgrovet, suspendAgrovet };

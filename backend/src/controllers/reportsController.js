@@ -1,4 +1,5 @@
 const prisma = require("../config/db");
+const { areaScope } = require("../utils/geography");
 
 // GET /api/reports/disbursements?from=&to=&countyId=
 // County-scoped rollup of money disbursed OUT to farmers, grouped by
@@ -11,7 +12,12 @@ async function disbursementSummary(req, res) {
 
   // Same county-scoping principle as the rest of the app: non-National-Admin
   // roles are always forced to their own county, regardless of query params.
-  const countyId = req.user.role === "NATIONAL_ADMIN" ? req.query.countyId : req.user.countyId;
+  // A Sub-County Officer is further limited to their own sub-county, and a
+  // Director may narrow to one sub-county or ward (?subCountyId= / ?wardId=).
+  const scope = areaScope(req.user);
+  const countyId = scope.countyId || req.query.countyId;
+  const subCountyId = scope.subCountyId || req.query.subCountyId;
+  const { wardId } = req.query;
 
   const dateFilter =
     from || to
@@ -26,7 +32,11 @@ async function disbursementSummary(req, res) {
   const payouts = await prisma.payout.findMany({
     where: {
       ...dateFilter,
-      cooperative: countyId ? { countyId } : {},
+      cooperative: {
+        ...(countyId ? { countyId } : {}),
+        ...(subCountyId ? { subCountyId } : {}),
+        ...(wardId ? { wardId } : {}),
+      },
     },
     select: {
       amount: true,

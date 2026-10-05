@@ -2,11 +2,17 @@ const express = require("express");
 const { authenticateAgrovet, requireApprovedShop } = require("../middleware/auth");
 const products = require("../controllers/inputProductController");
 const collections = require("../controllers/inputCollectionController");
+const { uploadOwnFile } = require("../controllers/agrovetAuthController");
+const { upload } = require("../utils/fileStorage");
 
 // Mounted at /api/agrovet — every route here acts on "my own shop" only,
 // derived from the verified token, never from a client-supplied ID.
 const router = express.Router();
 router.use(authenticateAgrovet);
+
+// Shop photo / business permit: allowed while pending, so an owner can add a
+// permit the reviewing officer is waiting for.
+router.post("/files", upload.single("file"), uploadOwnFile);
 
 // Catalog management — requires approval, since an unapproved shop has no
 // business publishing prices yet.

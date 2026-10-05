@@ -3,6 +3,7 @@ const { defaultPermissionsForRole } = require("../utils/rolePermissions");
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
+const { resolveLocation, areaScope, httpError } = require("../utils/geography");
 const { toPublicUser } = require("./authController");
 
 // HTML forms send "" for every blank field. z.string().uuid().optional()
@@ -23,6 +24,8 @@ const createStaffSchema = z.object({
   phoneNumber: blankToUndefined(z.string().optional()),
   subCounty: blankToUndefined(z.string().optional()),
   ward: blankToUndefined(z.string().optional()),
+  subCountyId: blankToUndefined(z.string().uuid().optional()),
+  wardId: blankToUndefined(z.string().uuid().optional()),
   reportsToId: blankToUndefined(z.string().uuid().optional()),
 });
 
@@ -36,9 +39,20 @@ const permissionSchema = z.object({
 });
 
 async function listStaff(req, res) {
-  const countyId = req.user.role === "NATIONAL_ADMIN" ? req.query.countyId : req.user.countyId;
+  // Directors see their county's staff; a Sub-County Officer sees the staff
+  // in their own sub-county; the National Admin can filter by county.
+  const scope = areaScope(req.user);
+  const countyId = scope.countyId || req.query.countyId;
+  const { subCountyId, wardId } = req.query;
+  if (scope.subCountyId && subCountyId && subCountyId !== scope.subCountyId) {
+    throw httpError(403, "You can only view your own sub-county");
+  }
   const staff = await prisma.user.findMany({
-    where: countyId ? { countyId } : {},
+    where: {
+      ...(countyId ? { countyId } : {}),
+      ...(scope.subCountyId ? { subCountyId: scope.subCountyId } : subCountyId ? { subCountyId } : {}),
+      ...(wardId ? { wardId } : {}),
+    },
     include: {
       permissions: true,
       county: { select: { id: true, name: true } },
@@ -92,6 +106,15 @@ async function createStaff(req, res) {
     }
   }
 
+  const location = countyId
+    ? await resolveLocation({ countyId, subCountyId: data.subCountyId, wardId: data.wardId, subCounty: data.subCounty, ward: data.ward })
+    : {};
+  // A Sub-County Officer's sub-county is what decides what they can see, so
+  // it's required for that role.
+  if (data.role === "SUBCOUNTY_OFFICER" && !location.subCountyId) {
+    throw httpError(400, "Choose the sub-county this officer covers");
+  }
+
   const passwordHash = await bcrypt.hash(data.password, 10);
 
   const user = await prisma.user.create({
@@ -104,8 +127,10 @@ async function createStaff(req, res) {
       jobGroup: data.jobGroup,
       designation: data.designation,
       phoneNumber: data.phoneNumber,
-      subCounty: data.subCounty,
-      ward: data.ward,
+      subCounty: location.subCounty ?? data.subCounty,
+      ward: location.ward ?? data.ward,
+      subCountyId: location.subCountyId,
+      wardId: location.wardId,
       reportsToId: data.reportsToId,
       // Role defaults, so a new Sub-County Officer / Field Officer /
       // Cooperative Manager can actually use the system on first login.
@@ -149,6 +174,14 @@ async function updateStaff(req, res) {
       return res.status(409).json({ error: "That cooperative already has a different manager" });
     }
     await prisma.cooperative.update({ where: { id: coop.id }, data: { managerId: target.id } });
+  }
+
+  if (["subCountyId", "wardId", "subCounty", "ward"].some((k) => data[k] !== undefined)) {
+    const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
+    const { subCountyId, wardId, subCounty, ward, ...restData } = data;
+    const location = await resolveLocation({ countyId: data.countyId || target.countyId, subCountyId, wardId, subCounty, ward });
+    Object.keys(data).forEach((k) => delete data[k]);
+    Object.assign(data, restData, location);
   }
 
   const user = Object.keys(data).length

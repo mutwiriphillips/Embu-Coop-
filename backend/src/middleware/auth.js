@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const prisma = require("../config/db");
+const { inArea } = require("../utils/geography");
 
 /**
  * Verifies the JWT bearer token and attaches the authenticated user
@@ -122,6 +123,10 @@ function requireCooperativeAccess() {
     if (cooperative.countyId !== req.user.countyId) {
       return res.status(403).json({ error: "This cooperative is outside your county" });
     }
+    // A Sub-County Officer assigned to a sub-county sees only that sub-county.
+    if (!inArea(req.user, cooperative)) {
+      return res.status(403).json({ error: "This cooperative is outside your sub-county" });
+    }
     req.cooperative = cooperative;
     next();
   };
@@ -186,6 +191,9 @@ function requireStaffAccess() {
 
     if (targetStaff.countyId !== req.user.countyId) {
       return res.status(403).json({ error: "This staff account is outside your county" });
+    }
+    if (!inArea(req.user, targetStaff)) {
+      return res.status(403).json({ error: "This staff account is outside your sub-county" });
     }
     req.targetStaff = targetStaff;
     next();
@@ -272,6 +280,9 @@ function requireAgrovetShopAccess() {
 
     if (shop.countyId !== req.user.countyId) {
       return res.status(403).json({ error: "This agrovet shop is outside your county" });
+    }
+    if (!inArea(req.user, shop)) {
+      return res.status(403).json({ error: "This agrovet shop is outside your sub-county" });
     }
     req.targetAgrovetShop = shop;
     next();

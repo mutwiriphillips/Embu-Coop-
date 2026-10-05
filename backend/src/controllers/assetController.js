@@ -1,6 +1,8 @@
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
+const { saveFile, assertValidFile } = require("../utils/fileStorage");
+const { httpError } = require("../utils/geography");
 
 const ASSET_TYPES = ["LIVESTOCK", "POULTRY", "VEHICLE", "PROPERTY_UNIT", "OTHER"];
 const ASSET_STATUSES = ["ACTIVE", "TRANSFERRED", "SOLD", "DECEASED", "WRITTEN_OFF"];
@@ -176,7 +178,30 @@ async function memberAssetStatement(req, res) {
   });
 }
 
+// POST /cooperatives/:id/assets/:assetId/photos  (multipart "photos", up to 5)
+// Photos of a cow, a boda boda, a housing unit: the visual record that makes
+// an asset entry verifiable on a field visit.
+async function addAssetPhotos(req, res) {
+  const asset = await prisma.asset.findUnique({ where: { id: req.params.assetId } });
+  if (!asset || asset.cooperativeId !== req.params.id) throw httpError(404, "Asset not found in this cooperative");
+  const photos = req.files || [];
+  if (!photos.length) throw httpError(400, "Attach at least one photo");
+  photos.forEach((p) => assertValidFile(p, "ASSET_PHOTO"));
+  const saved = [];
+  for (const file of photos) {
+    saved.push(await saveFile({
+      file,
+      purpose: "ASSET_PHOTO",
+      scope: { countyId: req.cooperative.countyId, cooperativeId: asset.cooperativeId, assetId: asset.id },
+      uploadedByUserId: req.user.id,
+    }));
+  }
+  await recordAudit({ userId: req.user.id, action: "ADD_ASSET_PHOTOS", entityType: "Asset", entityId: asset.id, metadata: { count: saved.length } });
+  res.status(201).json(saved);
+}
+
 module.exports = {
+  addAssetPhotos,
   listAssets,
   recordAsset,
   listAssetEvents,

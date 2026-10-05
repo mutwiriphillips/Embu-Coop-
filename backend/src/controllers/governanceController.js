@@ -1,6 +1,8 @@
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
+const { saveFile, assertValidFile, toStorageKey, fileIdFromKey } = require("../utils/fileStorage");
+const { httpError } = require("../utils/geography");
 const {
   checkOneThirdRule,
   deriveCommitteeStatus,
@@ -192,9 +194,27 @@ const agmSchema = z.object({
   minutesStorageKey: z.string().optional(),
 });
 
+// Store the AGM's notice / minutes files (multipart fields "notice" and
+// "minutes") and return the storageKey columns to set. Both are checked first,
+// so one bad file never leaves the other half-saved.
+async function storeAgmFiles(req) {
+  const notice = req.files?.notice?.[0];
+  const minutes = req.files?.minutes?.[0];
+  assertValidFile(notice, "AGM_NOTICE");
+  assertValidFile(minutes, "AGM_MINUTES");
+  const scope = { countyId: req.cooperative.countyId, cooperativeId: req.cooperative.id };
+  const keys = {};
+  if (notice) keys.noticeStorageKey = toStorageKey((await saveFile({ file: notice, purpose: "AGM_NOTICE", scope, uploadedByUserId: req.user.id })).id);
+  if (minutes) keys.minutesStorageKey = toStorageKey((await saveFile({ file: minutes, purpose: "AGM_MINUTES", scope, uploadedByUserId: req.user.id })).id);
+  return keys;
+}
+
+const withFileIds = (a) => ({ ...a, noticeFileId: fileIdFromKey(a.noticeStorageKey), minutesFileId: fileIdFromKey(a.minutesStorageKey) });
+
 async function recordAGM(req, res) {
-  const data = agmSchema.parse(req.body);
-  const agm = await prisma.aGM.create({ data: { ...data, cooperativeId: req.params.id } });
+  const { noticeStorageKey, minutesStorageKey, ...data } = agmSchema.parse(req.body);
+  const files = await storeAgmFiles(req);
+  const agm = await prisma.aGM.create({ data: { ...data, ...files, cooperativeId: req.params.id } });
 
   await recordAudit({
     userId: req.user.id,
@@ -203,7 +223,20 @@ async function recordAGM(req, res) {
     entityId: agm.id,
   });
 
-  res.status(201).json(agm);
+  res.status(201).json(withFileIds(agm));
+}
+
+// POST /cooperatives/:id/governance/agms/:agmId/files  (multipart notice / minutes)
+// The letter calling the AGM comes before the meeting and the signed minutes
+// only after it, so files can be added to an AGM after it's recorded.
+async function attachAGMFiles(req, res) {
+  const agm = await prisma.aGM.findUnique({ where: { id: req.params.agmId } });
+  if (!agm || agm.cooperativeId !== req.params.id) throw httpError(404, "AGM not found");
+  const files = await storeAgmFiles(req);
+  if (!Object.keys(files).length) throw httpError(400, "Attach the notice, the minutes, or both");
+  const updated = await prisma.aGM.update({ where: { id: agm.id }, data: files });
+  await recordAudit({ userId: req.user.id, action: "ATTACH_AGM_FILES", entityType: "AGM", entityId: agm.id, metadata: Object.keys(files) });
+  res.json(withFileIds(updated));
 }
 
 async function listAGMs(req, res) {
@@ -211,10 +244,11 @@ async function listAGMs(req, res) {
     where: { cooperativeId: req.params.id },
     orderBy: { meetingDate: "desc" },
   });
-  res.json(agms);
+  res.json(agms.map(withFileIds));
 }
 
 module.exports = {
+  attachAGMFiles,
   saveCommittee,
   listCommittees,
   overrideCommittee,

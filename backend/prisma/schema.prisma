@@ -24,6 +24,7 @@ model County {
   staff        User[]
   cooperatives Cooperative[]
   agrovetShops AgrovetShop[]
+  subCounties  SubCounty[]
 }
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,12 @@ model User {
   county         County?   @relation(fields: [countyId], references: [id])
   subCounty      String?
   ward           String?
+  // Structured location (County -> Sub-County -> Ward). The text fields above
+  // are kept in sync with these names so existing screens keep working.
+  subCountyId    String?
+  subCountyRef   SubCounty?  @relation("UserSubCounty", fields: [subCountyId], references: [id])
+  wardId         String?
+  wardRef        Ward?       @relation("UserWard", fields: [wardId], references: [id])
   reportsToId    String?
   reportsTo      User?     @relation("ReportingLine", fields: [reportsToId], references: [id])
   reports        User[]    @relation("ReportingLine")
@@ -188,6 +195,10 @@ model Cooperative {
   county             County      @relation(fields: [countyId], references: [id])
   subCounty          String
   ward               String
+  subCountyId        String?
+  subCountyRef       SubCounty?  @relation("CoopSubCounty", fields: [subCountyId], references: [id])
+  wardId             String?
+  wardRef            Ward?       @relation("CoopWard", fields: [wardId], references: [id])
   managerId          String?
   manager            User?       @relation("CoopManager", fields: [managerId], references: [id])
   createdAt          DateTime    @default(now())
@@ -207,6 +218,8 @@ model Cooperative {
 
   @@index([valueChain])
   @@index([countyId, subCounty, ward])
+  @@index([subCountyId])
+  @@index([wardId])
 }
 
 enum Gender {
@@ -655,6 +668,11 @@ model AgrovetShop {
   countyId          String
   county            County                @relation(fields: [countyId], references: [id])
   subCounty         String?
+  ward              String?
+  subCountyId       String?
+  subCountyRef      SubCounty?            @relation("AgrovetSubCounty", fields: [subCountyId], references: [id])
+  wardId            String?
+  wardRef           Ward?                 @relation("AgrovetWard", fields: [wardId], references: [id])
   status            AgrovetApprovalStatus @default(PENDING)
   reviewedById      String?
   reviewedBy        User?                 @relation("AgrovetReviewer", fields: [reviewedById], references: [id])
@@ -846,6 +864,81 @@ model AgrovetReimbursement {
   collections   InputCollection[]
 
   @@index([agrovetShopId, reimbursementDate])
+}
+
+// ---------------------------------------------------------------------------
+// Geography: County -> Sub-County -> Ward
+// ---------------------------------------------------------------------------
+// Reference data for Kenya's 290 sub-counties (IEBC constituencies) and 1,450
+// wards, loaded from src/data/kenyaGeography.js. Matched on official IEBC
+// code, so spelling corrections never create duplicates.
+
+model SubCounty {
+  id           String        @id @default(uuid())
+  code         Int           @unique // IEBC constituency code, 1-290
+  name         String
+  countyId     String
+  county       County        @relation(fields: [countyId], references: [id])
+  wards        Ward[]
+  cooperatives Cooperative[] @relation("CoopSubCounty")
+  staff        User[]        @relation("UserSubCounty")
+  agrovetShops AgrovetShop[] @relation("AgrovetSubCounty")
+
+  @@index([countyId])
+}
+
+model Ward {
+  id           String        @id @default(uuid())
+  code         Int           @unique // IEBC ward code, 1-1450
+  name         String
+  subCountyId  String
+  subCounty    SubCounty     @relation(fields: [subCountyId], references: [id])
+  cooperatives Cooperative[] @relation("CoopWard")
+  staff        User[]        @relation("UserWard")
+  agrovetShops AgrovetShop[] @relation("AgrovetWard")
+
+  @@index([subCountyId])
+}
+
+// ---------------------------------------------------------------------------
+// Uploaded files (documents and photos)
+// ---------------------------------------------------------------------------
+// Stored in PostgreSQL, so files survive redeploys on Render (whose web
+// service disk is wiped on every deploy) without a separate storage service
+// or extra credentials. Every file records what it belongs to, which is what
+// GET /api/files/:id uses to decide who may open it.
+
+enum FilePurpose {
+  DOCUMENT
+  AGM_NOTICE
+  AGM_MINUTES
+  AGROVET_SHOP_PHOTO
+  AGROVET_PERMIT
+  ASSET_PHOTO
+  VISIT_PHOTO
+}
+
+model StoredFile {
+  id                  String      @id @default(uuid())
+  purpose             FilePurpose
+  fileName            String
+  mimeType            String
+  sizeBytes           Int
+  sha256              String
+  data                Bytes
+  countyId            String?
+  cooperativeId       String?
+  agrovetShopId       String?
+  assetId             String?
+  visitId             String?
+  uploadedByUserId    String?
+  uploadedByAgrovetId String?
+  createdAt           DateTime    @default(now())
+
+  @@index([cooperativeId, purpose])
+  @@index([agrovetShopId, purpose])
+  @@index([assetId])
+  @@index([visitId])
 }
 
 // ---------------------------------------------------------------------------

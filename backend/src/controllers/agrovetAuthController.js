@@ -3,6 +3,8 @@ const jwt = require("jsonwebtoken");
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
+const { resolveLocation, httpError } = require("../utils/geography");
+const { saveFile, assertValidFile } = require("../utils/fileStorage");
 
 // Unlike member registration (which claims a Member record staff already
 // created), an agrovet shop genuinely doesn't exist on this platform until
@@ -13,11 +15,15 @@ const applySchema = z.object({
   ownerName: z.string().min(1),
   ownerNationalId: z.string().min(1),
   phoneNumber: z.string().min(1),
-  email: z.string().email().optional(),
+  email: z.preprocess((v) => (v === "" ? undefined : v), z.string().email().optional()),
   physicalAddress: z.string().min(1),
   countyId: z.string().uuid(),
+  // Sub-county and ward come from the dropdowns. The sub-county is what
+  // routes the application to the right Sub-County Officer for review.
+  subCountyId: z.string().uuid(),
+  wardId: z.string().uuid(),
   subCounty: z.string().optional(),
-  reimbursementMsisdn: z.string().optional(),
+  reimbursementMsisdn: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
   password: z.string().min(8),
 });
 
@@ -39,6 +45,7 @@ function toPublicShop(shop, account) {
     ownerName: shop.ownerName,
     physicalAddress: shop.physicalAddress,
     subCounty: shop.subCounty,
+    ward: shop.ward,
     status: shop.status,
     rejectionNote: shop.rejectionNote || undefined,
     county: shop.county ? { id: shop.county.id, name: shop.county.name } : undefined,
@@ -54,6 +61,16 @@ async function apply(req, res) {
     return res.status(409).json({ error: "An agrovet account already exists for this National ID. Please log in instead." });
   }
 
+  const location = await resolveLocation({ countyId: data.countyId, subCountyId: data.subCountyId, wardId: data.wardId });
+  if (!location.wardId) throw httpError(400, "Choose your shop's ward");
+
+  // Optional photo of the shop and copy of its business permit, sent with
+  // the application. Checked before anything is created.
+  const shopPhoto = req.files?.shopPhoto?.[0];
+  const permit = req.files?.permit?.[0];
+  assertValidFile(shopPhoto, "AGROVET_SHOP_PHOTO");
+  assertValidFile(permit, "AGROVET_PERMIT");
+
   const passwordHash = await bcrypt.hash(data.password, 10);
 
   const shop = await prisma.agrovetShop.create({
@@ -64,7 +81,7 @@ async function apply(req, res) {
       email: data.email,
       physicalAddress: data.physicalAddress,
       countyId: data.countyId,
-      subCounty: data.subCounty,
+      ...location,
       reimbursementMsisdn: data.reimbursementMsisdn,
       account: {
         create: {
@@ -77,6 +94,10 @@ async function apply(req, res) {
     },
     include: { account: true, county: true },
   });
+
+  const scope = { countyId: shop.countyId, agrovetShopId: shop.id };
+  if (shopPhoto) await saveFile({ file: shopPhoto, purpose: "AGROVET_SHOP_PHOTO", scope, uploadedByAgrovetId: shop.account.id });
+  if (permit) await saveFile({ file: permit, purpose: "AGROVET_PERMIT", scope, uploadedByAgrovetId: shop.account.id });
 
   await recordAudit({
     action: "AGROVET_APPLY",
@@ -116,4 +137,21 @@ async function me(req, res) {
   res.json({ shop: toPublicShop(req.agrovetShop, req.agrovetAccount) });
 }
 
-module.exports = { apply, login, me, toPublicShop };
+
+// POST /api/agrovet/files  (multipart: file, purpose=AGROVET_SHOP_PHOTO|AGROVET_PERMIT)
+// A shop owner adds a shop photo or business permit to their own shop. Allowed
+// while the application is still pending, since a permit may be what the
+// reviewing officer is waiting for.
+async function uploadOwnFile(req, res) {
+  const purpose = req.body.purpose;
+  if (!["AGROVET_SHOP_PHOTO", "AGROVET_PERMIT"].includes(purpose)) throw httpError(400, "Choose shop photo or business permit");
+  const saved = await saveFile({
+    file: req.file,
+    purpose,
+    scope: { countyId: req.agrovetShop.countyId, agrovetShopId: req.agrovetShop.id },
+    uploadedByAgrovetId: req.agrovetAccount.id,
+  });
+  res.status(201).json(saved);
+}
+
+module.exports = { apply, login, me, toPublicShop, uploadOwnFile };

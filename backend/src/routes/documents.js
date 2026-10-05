@@ -1,6 +1,7 @@
 const express = require("express");
 const { authenticate, requireRole, requirePermission, requireCooperativeAccess } = require("../middleware/auth");
 const ctrl = require("../controllers/documentController");
+const { upload } = require("../utils/fileStorage");
 
 // Mounted at /api/cooperatives/:id/documents
 const router = express.Router({ mergeParams: true });
@@ -8,7 +9,7 @@ router.use(authenticate);
 router.use(requireCooperativeAccess());
 
 router.get("/", requirePermission("documents", "canView"), ctrl.listDocuments);
-router.post("/", requirePermission("documents", "canEdit"), ctrl.uploadDocument);
+router.post("/", requirePermission("documents", "canEdit"), upload.single("file"), ctrl.uploadDocument);
 
 // Tier 1: Sub-county officer review
 router.post(

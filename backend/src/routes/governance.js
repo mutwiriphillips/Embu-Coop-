@@ -1,6 +1,8 @@
 const express = require("express");
 const { authenticate, requireRole, requirePermission, requireCooperativeAccess } = require("../middleware/auth");
 const ctrl = require("../controllers/governanceController");
+const { upload } = require("../utils/fileStorage");
+const agmFiles = upload.fields([{ name: "notice", maxCount: 1 }, { name: "minutes", maxCount: 1 }]);
 
 // Mounted at /api/cooperatives/:id/governance
 const router = express.Router({ mergeParams: true });
@@ -32,6 +34,7 @@ router.patch(
 
 // AGM
 router.get("/agms", requirePermission("governance", "canView"), ctrl.listAGMs);
-router.post("/agms", requirePermission("governance", "canEdit"), ctrl.recordAGM);
+router.post("/agms", requirePermission("governance", "canEdit"), agmFiles, ctrl.recordAGM);
+router.post("/agms/:agmId/files", requirePermission("governance", "canEdit"), agmFiles, ctrl.attachAGMFiles);
 
 module.exports = router;

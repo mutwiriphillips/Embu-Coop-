@@ -12,10 +12,11 @@
     "seed": "node prisma/seed.js",
     "seed:counties": "node prisma/seed-counties.js",
     "seed:pilot": "node prisma/seed-pilot.js",
-    "reset:all": "node prisma/reset-guard.js && npx prisma db push --force-reset --accept-data-loss && npm run seed:counties && npm run seed:pilot",
+    "reset:all": "node prisma/reset-guard.js && npx prisma db push --force-reset --accept-data-loss && npm run seed:counties && npm run seed:pilot && npm run geo:sync",
     "verify:seed": "node prisma/verify-seed.js",
     "test:credit-score": "node src/utils/creditScore.test.js",
-    "fix:staff-access": "node prisma/fix-staff-access.js"
+    "fix:staff-access": "node prisma/fix-staff-access.js",
+    "geo:sync": "node prisma/sync-geography.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
