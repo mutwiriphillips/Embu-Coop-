@@ -160,9 +160,15 @@ As Director or National Admin:
 
 - [ ] Backend Shell: `npm run geo:sync`; note anything it says it couldn't match
 - [ ] As the Director: Dashboard shows "Drill down by sub-county and ward"
-      with Embu's 4 sub-counties (Manyatta, Mbeere North, Mbeere South,
+      with Embu's 5 sub-counties (Manyatta, Mbeere North, Mbeere South, Mwea,
       Runyenjes); click Runyenjes → its 6 wards; click Kagaari South → Kirimiri
       Coffee, which opens
+- [ ] Click Mwea → 2 wards (Makima, Mwea); Mbeere South → 3 wards (Kiambere,
+      Mavuria, Mbeti South). Kirinyaga's dropdown still has its own Mwea
+- [ ] Agrovet Apply (signed out): Embu → Sub-county lists Mwea; choosing it
+      offers Makima and Mwea wards
+- [ ] Backend Logs after deploy: `[geography]` lines show the two wards moving;
+      after a restart they don't repeat
 - [ ] Cooperative Registry → New Cooperative: Sub-county then Ward dropdowns;
       changing the sub-county clears the ward
 - [ ] Registry filters: pick a sub-county and ward; the list narrows

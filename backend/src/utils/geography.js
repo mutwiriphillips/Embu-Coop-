@@ -1,5 +1,6 @@
 const prisma = require("../config/db");
-const { SUB_COUNTIES, WARDS } = require("../data/kenyaGeography");
+const { SUB_COUNTIES, WARDS, FORMER_PARENT } = require("../data/kenyaGeography");
+const { syncReference } = require("./geographySync");
 
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -13,8 +14,9 @@ function httpError(status, message) {
  * Make sure a county's sub-counties and wards exist in the database. Called
  * lazily by the dropdown endpoints, so a fresh deploy (or a county nobody has
  * opened yet) fills itself in on first use, the same self-healing approach as
- * the county list. Upserts by IEBC code: idempotent, never deletes, and never
- * duplicates. Normally a single count query.
+ * the county list. Matches by official code: idempotent, never deletes, and
+ * never duplicates. Normally a single count query. (Wards that move between
+ * sub-counties are handled at server start-up by reconcileGeography.)
  */
 async function ensureCountyGeography(countyId) {
   const county = await prisma.county.findUnique({ where: { id: countyId } });
@@ -23,21 +25,7 @@ async function ensureCountyGeography(countyId) {
   const expectedSubs = SUB_COUNTIES.filter(([, cc]) => cc === countyCode);
   const have = await prisma.subCounty.count({ where: { countyId } });
   if (have >= expectedSubs.length) return county;
-
-  for (const [code, , name] of expectedSubs) {
-    const sub = await prisma.subCounty.upsert({
-      where: { code },
-      update: {},
-      create: { code, name, countyId },
-    });
-    for (const [wcode, , wname] of WARDS.filter(([, sc]) => sc === code)) {
-      await prisma.ward.upsert({
-        where: { code: wcode },
-        update: {},
-        create: { code: wcode, name: wname, subCountyId: sub.id },
-      });
-    }
-  }
+  await syncReference(prisma);
   return county;
 }
 
@@ -49,11 +37,31 @@ function matchSubCountyCode(countyCode, text) {
   const hit = SUB_COUNTIES.find(([, cc, name]) => cc === countyCode && norm(name) === t);
   return hit ? hit[0] : null;
 }
+const wardNameMatches = (t) => ([, , name, aliases]) => norm(name) === t || (aliases || []).some((a) => norm(a) === t);
 function matchWardCode(subCountyCode, text) {
   const t = norm(text);
   if (!t) return null;
-  const hit = WARDS.find(([, sc, name, aliases]) => sc === subCountyCode && (norm(name) === t || (aliases || []).some((a) => norm(a) === t)));
+  const hit = WARDS.find((w) => w[1] === subCountyCode && wardNameMatches(t)(w));
   return hit ? hit[0] : null;
+}
+
+/**
+ * Match free text for a sub-county and ward to official codes. If the ward
+ * has since moved to a newer sub-county (e.g. "Mbeere South" + "Mwea" now
+ * belongs to Mwea Sub-County), the ward's current sub-county is returned, so
+ * the record lands where the ward actually is.
+ * Returns { subCountyCode, wardCode } (either may be null).
+ */
+function matchTextLocation(countyCode, subText, wardText) {
+  const subCountyCode = matchSubCountyCode(countyCode, subText);
+  if (!subCountyCode) return { subCountyCode: null, wardCode: null };
+  const t = norm(wardText);
+  if (!t) return { subCountyCode, wardCode: null };
+  const direct = matchWardCode(subCountyCode, wardText);
+  if (direct) return { subCountyCode, wardCode: direct };
+  const moved = WARDS.find((w) => FORMER_PARENT[w[0]] === subCountyCode && wardNameMatches(t)(w));
+  if (moved) return { subCountyCode: moved[1], wardCode: moved[0] };
+  return { subCountyCode, wardCode: null };
 }
 
 /**
@@ -95,12 +103,18 @@ async function resolveLocation({ countyId, subCountyId, wardId, subCounty, ward 
   if (ward !== undefined) out.ward = ward;
   if (subCounty) {
     const county = await ensureCountyGeography(countyId);
-    const scCode = matchSubCountyCode(Number(county.code), subCounty);
-    if (scCode) {
-      const sc = await prisma.subCounty.findUnique({ where: { code: scCode } });
-      out.subCountyId = sc.id;
-      const wCode = ward ? matchWardCode(scCode, ward) : null;
-      if (wCode) out.wardId = (await prisma.ward.findUnique({ where: { code: wCode } })).id;
+    const { subCountyCode, wardCode } = matchTextLocation(Number(county.code), subCounty, ward);
+    if (subCountyCode) {
+      const sc = await prisma.subCounty.findUnique({ where: { code: subCountyCode } });
+      if (sc) {
+        out.subCountyId = sc.id;
+        // The ward moved to a newer sub-county: store the name it's under now.
+        if (norm(sc.name) !== norm(subCounty)) out.subCounty = sc.name;
+      }
+      if (wardCode && sc) {
+        const w = await prisma.ward.findUnique({ where: { code: wardCode } });
+        if (w && w.subCountyId === sc.id) out.wardId = w.id;
+      }
     }
   }
   return out;
@@ -130,4 +144,4 @@ function inArea(user, record) {
   return Object.entries(scope).every(([k, v]) => record[k] === v);
 }
 
-module.exports = { ensureCountyGeography, resolveLocation, areaScope, inArea, matchSubCountyCode, matchWardCode, httpError, norm };
+module.exports = { ensureCountyGeography, resolveLocation, areaScope, inArea, matchSubCountyCode, matchWardCode, matchTextLocation, httpError, norm };

@@ -390,8 +390,10 @@ it connects) plus the live wiring and access-control tests described above.
 
 ## Geography, Area Scoping & File Uploads (Module 10)
 
-**County → Sub-County → Ward.** `SubCounty` (290, IEBC constituency codes) and
-`Ward` (1,450, IEBC ward codes) are reference tables loaded from
+**County → Sub-County → Ward.** `SubCounty` (290 IEBC constituencies, codes
+1–290, plus gazetted national-government sub-counties that aren't
+constituencies, codes 291+) and `Ward` (1,450, IEBC ward codes) are reference
+tables loaded from
 `backend/src/data/kenyaGeography.js`. The data came from the kenya-regions
 dataset and was cross-checked against an independent IEBC compilation:
 identical totals, identical constituencies in every county, and 23 ward
@@ -404,6 +406,25 @@ sub-county or a sub-county from another county.
 
 After deploying, run `npm run geo:sync` once (see `RENDER_DEPLOYMENT.md`):
 it loads the reference data and links existing records, changing nothing else.
+
+**Mwea Sub-County, Embu (code 291).** Embu's sub-counties are Manyatta,
+Runyenjes, Mbeere North, Mbeere South and **Mwea**. Mwea is a gazetted
+national-government sub-county (HQ Karaba) covering the Karaba, Riakanau and
+Makima areas, so it holds **Mwea Ward** and **Makima Ward**, which previously sat
+under Mbeere South; Mbeere South keeps Mbeti South, Mavuria and Kiambere. Embu
+still has 20 wards. Sources are cited in `ADMIN_SUB_COUNTIES` in
+`kenyaGeography.js`. Kirinyaga's Mwea Constituency (code 100) is separate and
+unchanged. `FORMER_PARENT` lets older text such as "Mbeere South / Mwea" still
+resolve, to its new sub-county.
+
+**Self-correcting on deploy.** `utils/geographySync.js` runs once in the
+background when the server starts: it adds any missing sub-county or ward,
+re-points any ward that moved, and moves any cooperative, staff member or
+agrovet shop whose ward is now in a different sub-county. It never deletes or
+renames, and when nothing needs changing it only reads. Sub-County Officers
+are never reassigned automatically; the log names any whose sub-county gave
+wards to a new one, so the Director can decide. `GEO_AUTO_SYNC=false` turns
+the start-up run off.
 
 **Who sees what** (`areaScope()` in `utils/geography.js`, applied in every
 list and every access check): National Admin → everything; Director and

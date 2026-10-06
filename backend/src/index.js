@@ -77,6 +77,17 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Embu Coop backend listening on port ${PORT}`);
+  // Bring sub-counties/wards in line with the reference data (e.g. the gazetted
+  // Mwea Sub-County, Embu) and keep every record's sub-county matching its
+  // ward. Does nothing when everything already matches; never deletes. Runs in
+  // the background so it can't delay start-up, and a failure is only logged.
+  // Set GEO_AUTO_SYNC=false to switch it off (then run `npm run geo:sync`).
+  if (process.env.GEO_AUTO_SYNC !== "false") {
+    const prisma = require("./config/db");
+    require("./utils/geographySync")
+      .reconcileGeography(prisma)
+      .catch((e) => console.error("[geography] start-up sync failed (the app is unaffected; run npm run geo:sync):", e.message));
+  }
 });
 
 module.exports = app;

@@ -129,7 +129,30 @@ to a cooperative (assign them on Staff & Access). Safe to re-run.
   The normal Render build's `prisma db push` adds it without touching
   existing data. Do **not** use `reset:all`.
 
-### Sub-counties, wards and file uploads (this release)
+### Mwea Sub-County, Embu (this release)
+
+**Nothing to run.** No database schema change. On start-up the backend adds
+Mwea as Embu's fifth sub-county and moves **Mwea Ward** and **Makima Ward** into
+it from Mbeere South. Any cooperative, staff member or agrovet shop already
+recorded in those two wards moves with them. In the backend Logs, look for
+lines beginning `[geography]`:
+
+```
+[geography] added 1 sub-counties and 0 wards
+[geography] ward Mwea: Mbeere South -> Mwea
+[geography] ward Makima: Mbeere South -> Mwea
+[geography] Cooperative <name> (<reg no>) (ward Mwea): sub-county Mbeere South -> Mwea
+[geography] review: Sub-County Officer <name> covers Mbeere South; Mwea is now its own sub-county
+```
+
+The last kind of line means a Mbeere South officer no longer sees Mwea's and
+Makima's cooperatives. If they should still cover them, the Director
+reassigns them on **Staff & Access** (or creates a Mwea officer). After a
+restart the lines don't appear again, because there is nothing left to change.
+Optional: `npm run geo:sync` in the Shell also links any old text-only record
+typed as "Mbeere South / Mwea" or "Mbeere South / Makima" to Mwea.
+
+### Sub-counties, wards and file uploads (previous release)
 
 **After deploying, run once in the backend Shell:**
 
@@ -137,7 +160,7 @@ to a cooperative (assign them on Staff & Access). Safe to re-run.
 npm run geo:sync
 ```
 
-It loads all 290 sub-counties and 1,450 wards, then links existing
+It loads all sub-counties (290 constituencies plus Mwea, Embu) and 1,450 wards, then links existing
 cooperatives, staff, and agrovet shops to them by matching the text they
 already have. It changes no existing text and never overwrites a link
 someone chose, and it lists anything it couldn't match so a Director can pick
