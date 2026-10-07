@@ -13,7 +13,9 @@ const coopSchema = z.object({
   name: z.string().min(1),
   registrationNumber: z.string().min(1),
   valueChain: z.enum(VALUE_CHAINS),
-  countyId: z.string().uuid(),
+  // Blank is treated as "not sent": Directors and officers are placed in
+  // their own county by the server, so only a National Admin must choose one.
+  countyId: z.preprocess((v) => (v === "" || v === null ? undefined : v), z.string().uuid().optional()),
   // Either pick from the dropdowns (subCountyId / wardId) or, for older
   // clients, send the names as text; resolveLocation reconciles the two.
   subCountyId: z.preprocess((v) => (v === "" ? undefined : v), z.string().uuid().optional()),
@@ -86,6 +88,7 @@ async function createCooperative(req, res) {
   const data = coopSchema.parse(req.body);
   const scope = areaScope(req.user);
   const countyId = scope.countyId || data.countyId;
+  if (!countyId) throw httpError(400, "Choose the county for this cooperative");
   const location = await resolveLocation({ countyId, subCountyId: data.subCountyId, wardId: data.wardId, subCounty: data.subCounty, ward: data.ward });
   if (!location.subCounty || !location.ward) {
     throw httpError(400, "Choose the cooperative's sub-county and ward");
@@ -119,12 +122,16 @@ const STAFF_ONLY_COOP_FIELDS = ["countyId", "registrationNumber", "valueChain", 
 async function updateCooperative(req, res) {
   const data = coopSchema.partial().parse(req.body);
   if (req.user.role === "COOPERATIVE_MANAGER") {
-    const blocked = STAFF_ONLY_COOP_FIELDS.filter((f) => f in data);
+    const blocked = STAFF_ONLY_COOP_FIELDS.filter((f) => data[f] !== undefined);
     if (blocked.length) {
       return res.status(403).json({ error: `Only county staff can change: ${blocked.join(", ")}` });
     }
   }
   const { subCountyId, wardId, subCounty, ward, ...rest } = data;
+  // Moving a cooperative to another county is a National Admin decision.
+  if (rest.countyId && req.user.role !== "NATIONAL_ADMIN" && req.user.role !== "COOPERATIVE_MANAGER" && rest.countyId !== req.user.countyId) {
+    throw httpError(403, "Only the National Admin can move a cooperative to another county");
+  }
   let location = {};
   if ([subCountyId, wardId, subCounty, ward].some((v) => v !== undefined)) {
     const current = req.cooperative || (await prisma.cooperative.findUnique({ where: { id: req.params.id } }));
