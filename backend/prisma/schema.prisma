@@ -190,6 +190,7 @@ model Cooperative {
   id                 String      @id @default(uuid())
   name               String
   registrationNumber String      @unique
+  registrationDate   DateTime?
   valueChain         ValueChain
   countyId           String
   county             County      @relation(fields: [countyId], references: [id])
@@ -215,6 +216,7 @@ model Cooperative {
   produceDeliveries ProduceDelivery[]
   payouts         Payout[]
   assets          Asset[]
+  supervisoryBoard SupervisoryBoardMember[]
 
   @@index([valueChain])
   @@index([countyId, subCounty, ward])
@@ -495,6 +497,7 @@ model CreditAssessment {
 // ---------------------------------------------------------------------------
 
 enum DocumentType {
+  REGISTRATION_CERTIFICATE
   BY_LAWS
   MEETING_MINUTES
   CODE_OF_CONDUCT
@@ -587,7 +590,40 @@ model CommitteeMember {
   role                CommitteeRole
   electionDate        DateTime
   reelectionDueDate   DateTime
+  // Identity and service dates. Nullable so committees recorded before these
+  // fields existed stay valid; new entries must supply them (enforced in the
+  // API) and older entries can be completed with the Edit action.
+  nationalId          String?
+  phoneNumber         String?
+  appointmentDate     DateTime?
+  retirementDate      DateTime?     // blank while serving
   createdAt           DateTime      @default(now())
+}
+
+// The cooperative's Supervisory Board: exactly three seats (Co-operative
+// Societies Rules 2004, rule 28(1): three members, elected for three years,
+// one retiring each year). A seat's history is kept: when the holder retires
+// (retirementDate set) the seat opens for a successor and the old record stays.
+enum SupervisoryPosition {
+  CHAIRMAN
+  HONORARY_SECRETARY
+  MEMBER
+}
+
+model SupervisoryBoardMember {
+  id              String              @id @default(uuid())
+  cooperativeId   String
+  cooperative     Cooperative         @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  position        SupervisoryPosition
+  fullName        String
+  nationalId      String
+  phoneNumber     String
+  appointmentDate DateTime
+  retirementDate  DateTime?           // blank while serving
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([cooperativeId, position])
 }
 
 // Highly restricted, auditable bank account signatories.

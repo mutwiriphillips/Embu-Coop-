@@ -23,6 +23,24 @@ router.post(
   ctrl.addSignatory
 );
 
+// Fill in / correct a committee member's ID, phone and dates; record a retirement
+router.patch(
+  "/committees/:committeeId/members/:memberId",
+  requirePermission("governance", "canEdit"),
+  ctrl.updateCommitteeMember
+);
+
+// Supervisory Board (Chairman, Honorary Secretary, Member)
+router.get("/supervisory-board", requirePermission("governance", "canView"), ctrl.listBoard);
+router.post("/supervisory-board", requirePermission("governance", "canEdit"), ctrl.addBoardMember);
+router.patch("/supervisory-board/:memberId", requirePermission("governance", "canEdit"), ctrl.updateBoardMember);
+router.delete(
+  "/supervisory-board/:memberId",
+  requireRole("NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"),
+  requirePermission("governance", "canEdit"),
+  ctrl.deleteBoardMember
+);
+
 // Election candidates
 router.get("/candidates", requirePermission("governance", "canView"), ctrl.listCandidates);
 router.post("/candidates", requirePermission("governance", "canEdit"), ctrl.applyCandidate);

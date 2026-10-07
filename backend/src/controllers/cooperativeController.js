@@ -1,7 +1,29 @@
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
-const { resolveLocation, areaScope, httpError } = require("../utils/geography");
+const { resolveLocation, areaScope, httpError, norm } = require("../utils/geography");
+const { assertBelongs } = require("../utils/ownership");
+const { withLiveStatus } = require("../utils/governance");
+const { optionalDate } = require("../utils/validators");
+
+// Two societies can't share a name in one county (the Registrar doesn't allow
+// it), and two entries with the same name are almost always an accidental
+// double registration. A registration number is unique everywhere.
+async function assertNameAndNumberFree({ countyId, name, registrationNumber, exceptId }) {
+  if (name !== undefined) {
+    const sameCounty = await prisma.cooperative.findMany({ where: { countyId }, select: { id: true, name: true, registrationNumber: true } });
+    const twin = sameCounty.find((c) => c.id !== exceptId && norm(c.name) === norm(name));
+    if (twin) {
+      throw httpError(409, `A cooperative named "${twin.name}" (reg. no. ${twin.registrationNumber}) is already registered in this county. Open that record instead of registering it again.`);
+    }
+  }
+  if (registrationNumber !== undefined) {
+    const taken = await prisma.cooperative.findFirst({ where: { registrationNumber } });
+    if (taken && taken.id !== exceptId) {
+      throw httpError(409, `Registration number ${registrationNumber} is already used by "${taken.name}".`);
+    }
+  }
+}
 
 const VALUE_CHAINS = [
   "COFFEE", "DAIRY", "MIRAA", "IRRIGATION", "TEA", "SUGARCANE", "COTTON",
@@ -10,8 +32,11 @@ const VALUE_CHAINS = [
 ];
 
 const coopSchema = z.object({
-  name: z.string().min(1),
-  registrationNumber: z.string().min(1),
+  name: z.string().trim().min(1),
+  registrationNumber: z.string().trim().min(1),
+  // Date on the Certificate of Registration. Optional in the API so existing
+  // societies keep working until it is filled in.
+  registrationDate: optionalDate("Date of registration"),
   valueChain: z.enum(VALUE_CHAINS),
   // Blank is treated as "not sent": Directors and officers are placed in
   // their own county by the server, so only a National Admin must choose one.
@@ -69,6 +94,11 @@ async function listCooperatives(req, res) {
   res.json(cooperatives);
 }
 
+// A society can't have been registered tomorrow.
+function assertNotFuture(d) {
+  if (d && d.getTime() > Date.now() + 24 * 3600 * 1000) throw httpError(400, "Date of registration cannot be in the future");
+}
+
 async function getCooperative(req, res) {
   const coop = await prisma.cooperative.findUniqueOrThrow({
     where: { id: req.params.id },
@@ -76,12 +106,14 @@ async function getCooperative(req, res) {
       manager: { select: { id: true, fullName: true } },
       county: { select: { id: true, name: true } },
       members: true,
-      documents: true,
-      committees: { include: { members: true, signatories: true } },
+      documents: { orderBy: { createdAt: "desc" } },
+      committees: { include: { members: true, signatories: true }, orderBy: { createdAt: "desc" } },
       agms: true,
     },
   });
-  res.json(coop);
+  // Committee status is recomputed from today's date (the stored value goes
+  // stale as terms run out), and the committee in force is marked current.
+  res.json({ ...coop, committees: withLiveStatus(coop.committees) });
 }
 
 async function createCooperative(req, res) {
@@ -98,6 +130,8 @@ async function createCooperative(req, res) {
     throw httpError(403, "You can only register cooperatives in your own sub-county");
   }
   const { subCountyId, wardId, subCounty, ward, ...rest } = data;
+  assertNotFuture(rest.registrationDate);
+  await assertNameAndNumberFree({ countyId, name: rest.name, registrationNumber: rest.registrationNumber });
 
   const coop = await prisma.cooperative.create({
     data: { ...rest, countyId, ...location },
@@ -117,7 +151,7 @@ async function createCooperative(req, res) {
 // society's name, sub-county and ward, but not its county (which decides who
 // oversees it), registration number, value chain (which drives credit
 // scoring), or who its manager is.
-const STAFF_ONLY_COOP_FIELDS = ["countyId", "registrationNumber", "valueChain", "managerId"];
+const STAFF_ONLY_COOP_FIELDS = ["countyId", "registrationNumber", "registrationDate", "valueChain", "managerId"];
 
 async function updateCooperative(req, res) {
   const data = coopSchema.partial().parse(req.body);
@@ -128,13 +162,23 @@ async function updateCooperative(req, res) {
     }
   }
   const { subCountyId, wardId, subCounty, ward, ...rest } = data;
+  assertNotFuture(rest.registrationDate);
   // Moving a cooperative to another county is a National Admin decision.
   if (rest.countyId && req.user.role !== "NATIONAL_ADMIN" && req.user.role !== "COOPERATIVE_MANAGER" && rest.countyId !== req.user.countyId) {
     throw httpError(403, "Only the National Admin can move a cooperative to another county");
   }
+  const existing = req.cooperative || (await prisma.cooperative.findUnique({ where: { id: req.params.id } }));
+  if (rest.name !== undefined || rest.registrationNumber !== undefined) {
+    await assertNameAndNumberFree({
+      countyId: rest.countyId || existing.countyId,
+      name: rest.name !== undefined && rest.name !== existing.name ? rest.name : undefined,
+      registrationNumber: rest.registrationNumber !== undefined && rest.registrationNumber !== existing.registrationNumber ? rest.registrationNumber : undefined,
+      exceptId: existing.id,
+    });
+  }
   let location = {};
   if ([subCountyId, wardId, subCounty, ward].some((v) => v !== undefined)) {
-    const current = req.cooperative || (await prisma.cooperative.findUnique({ where: { id: req.params.id } }));
+    const current = existing;
     location = await resolveLocation({ countyId: rest.countyId || current.countyId, subCountyId, wardId, subCounty, ward });
     const scope = areaScope(req.user);
     if (scope.subCountyId && location.subCountyId && location.subCountyId !== scope.subCountyId) {
@@ -157,13 +201,36 @@ async function updateCooperative(req, res) {
   res.json(coop);
 }
 
+// Deleting is for a cooperative registered by mistake (a duplicate, a typo):
+// one that holds nothing. Deleting also wipes every member, ledger entry,
+// document and committee under it, so a cooperative that holds records is
+// refused rather than silently emptied; the Director sees exactly what it holds.
+const HOLDINGS = [
+  ["members", "member"], ["documents", "document"], ["committees", "committee"], ["agms", "AGM"],
+  ["candidates", "election candidate"], ["contributions", "contribution"], ["produceDeliveries", "produce delivery"],
+  ["payouts", "payout"], ["assets", "asset"], ["fieldVisits", "field visit"], ["creditAssessments", "credit assessment"],
+  ["supervisoryBoard", "supervisory board member"],
+];
+
 async function deleteCooperative(req, res) {
-  await prisma.cooperative.delete({ where: { id: req.params.id } });
+  const coop = await prisma.cooperative.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true, registrationNumber: true, _count: { select: Object.fromEntries(HOLDINGS.map(([k]) => [k, true])) } },
+  });
+  if (!coop) throw httpError(404, "Cooperative not found");
+  const files = await prisma.storedFile.count({ where: { cooperativeId: coop.id } });
+  const held = HOLDINGS.filter(([k]) => coop._count[k] > 0).map(([k, label]) => `${coop._count[k]} ${label}${coop._count[k] === 1 ? "" : "s"}`);
+  if (files > 0) held.push(`${files} stored file${files === 1 ? "" : "s"}`);
+  if (held.length) {
+    throw httpError(409, `${coop.name} (${coop.registrationNumber}) can't be deleted because it holds records: ${held.join(", ")}. Only a cooperative with nothing recorded under it (such as a duplicate registration) can be deleted.`);
+  }
+  await prisma.cooperative.delete({ where: { id: coop.id } });
   await recordAudit({
     userId: req.user.id,
     action: "DELETE_COOPERATIVE",
     entityType: "Cooperative",
-    entityId: req.params.id,
+    entityId: coop.id,
+    metadata: { name: coop.name, registrationNumber: coop.registrationNumber },
   });
   res.status(204).send();
 }
@@ -197,6 +264,7 @@ async function addMember(req, res) {
 
 async function updateMember(req, res) {
   const data = memberSchema.partial().parse(req.body);
+  assertBelongs(await prisma.member.findUnique({ where: { id: req.params.memberId } }), req.params.id, "Member");
   const member = await prisma.member.update({
     where: { id: req.params.memberId },
     data,
@@ -204,8 +272,26 @@ async function updateMember(req, res) {
   res.json(member);
 }
 
+// Removing a member also removes their contributions, deliveries, payouts,
+// assets and input credits (they cascade), which would silently change the
+// cooperative's ledger and credit score. A member with any such record is
+// refused; one entered by mistake, with nothing under it, can be removed.
 async function removeMember(req, res) {
-  await prisma.member.delete({ where: { id: req.params.memberId } });
+  const member = await prisma.member.findUnique({
+    where: { id: req.params.memberId },
+    select: {
+      id: true, cooperativeId: true, legalName: true,
+      _count: { select: { contributions: true, produceDeliveries: true, payouts: true, assets: true, inputCredits: true, inputCollections: true } },
+    },
+  });
+  assertBelongs(member, req.params.id, "Member");
+  const labels = { contributions: "contribution", produceDeliveries: "produce delivery", payouts: "payout", assets: "asset", inputCredits: "input credit", inputCollections: "input collection" };
+  const held = Object.entries(member._count).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${labels[k]}${n === 1 ? "" : "s"}`);
+  if (held.length) {
+    throw httpError(409, `${member.legalName} can't be removed because they have records: ${held.join(", ")}. Removing them would erase that history from the cooperative's ledger.`);
+  }
+  await prisma.member.delete({ where: { id: member.id } });
+  await recordAudit({ userId: req.user.id, action: "REMOVE_MEMBER", entityType: "Member", entityId: member.id, metadata: { cooperativeId: member.cooperativeId } });
   res.status(204).send();
 }
 

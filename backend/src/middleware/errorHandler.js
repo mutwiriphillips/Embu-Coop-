@@ -19,7 +19,8 @@ function errorHandler(err, req, res, next) {
     // Name the field that failed, so the user sees something actionable
     // instead of a bare "Validation failed".
     const first = err.errors?.[0];
-    const field = first?.path?.join(".") || "input";
+    // "members.1.phoneNumber" reads better as "members › row 2 › phoneNumber".
+    const field = first?.path?.map((p) => (typeof p === "number" ? `row ${p + 1}` : p)).join(" › ") || "input";
     return res.status(400).json({ error: `Validation failed on "${field}": ${first?.message || "invalid value"}`, details: err.errors });
   }
 

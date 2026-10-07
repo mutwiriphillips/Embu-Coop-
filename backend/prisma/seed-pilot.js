@@ -108,6 +108,16 @@ async function main() {
     },
   });
 
+  // The older seed.js created this same cooperative as EMB-COFFEE-0001. Say so
+  // rather than silently adding a lookalike (the registry then lists it twice).
+  // The registry's Delete button removes the empty copy.
+  const lookalike = await prisma.cooperative.findFirst({
+    where: { countyId: embu.id, registrationNumber: { not: "EMB-PILOT-0001" }, name: { equals: "Kirimiri Coffee Growers Cooperative Society", mode: "insensitive" } },
+  });
+  if (lookalike) {
+    console.warn(`  NOTE: "${lookalike.name}" is already registered as ${lookalike.registrationNumber}. After this run the registry will list it twice; open the registry and delete the ${lookalike.registrationNumber} entry (it is empty, so the Delete button will accept it).`);
+  }
+
   const cooperative = await prisma.cooperative.upsert({
     where: { registrationNumber: "EMB-PILOT-0001" },
     update: {},

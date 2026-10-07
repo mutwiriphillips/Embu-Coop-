@@ -49,7 +49,15 @@ async function main() {
     },
   });
 
-  await prisma.cooperative.upsert({
+  // seed-pilot.js creates this same cooperative as EMB-PILOT-0001. If it (or
+  // any cooperative of that name) already exists, don't add a second copy:
+  // that is how the registry came to list "Kirimiri" twice.
+  const alreadyThere = await prisma.cooperative.findFirst({
+    where: { countyId: embu.id, name: { equals: "Kirimiri Coffee Growers Cooperative Society", mode: "insensitive" } },
+  });
+  if (alreadyThere) {
+    console.log(`  Cooperative already present (${alreadyThere.registrationNumber}); not adding a duplicate.`);
+  } else await prisma.cooperative.upsert({
     where: { registrationNumber: "EMB-COFFEE-0001" },
     update: {},
     create: {

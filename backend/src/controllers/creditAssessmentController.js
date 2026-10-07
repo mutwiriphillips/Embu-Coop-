@@ -1,6 +1,6 @@
 const prisma = require("../config/db");
 const { computeCreditAssessment, ASSET_TRACKED_VALUE_CHAINS } = require("../utils/creditScore");
-const { deriveCommitteeStatus } = require("../utils/governance");
+const { deriveCommitteeStatus, latestPerType } = require("../utils/governance");
 const { recordAudit } = require("../utils/audit");
 
 // Gathers everything the scoring engine needs for one cooperative, refreshing
@@ -32,7 +32,10 @@ async function gatherAssessmentInputs(cooperative) {
       : Promise.resolve([]),
   ]);
 
-  const committees = committeesRaw.map((c) => ({
+  // Each save adds a new committee; only the newest of each type is in force.
+  // Scoring the superseded ones too would average an old, expired committee
+  // into the score of a cooperative that has since re-elected.
+  const committees = latestPerType(committeesRaw).map((c) => ({
     committeeType: c.committeeType,
     status: deriveCommitteeStatus(c.members),
     complianceOverride: c.complianceOverride,

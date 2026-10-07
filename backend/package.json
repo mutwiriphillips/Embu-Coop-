@@ -15,6 +15,7 @@
     "reset:all": "node prisma/reset-guard.js && npx prisma db push --force-reset --accept-data-loss && npm run seed:counties && npm run seed:pilot && npm run geo:sync",
     "verify:seed": "node prisma/verify-seed.js",
     "test:credit-score": "node src/utils/creditScore.test.js",
+    "test:governance": "node src/utils/governance.test.js",
     "fix:staff-access": "node prisma/fix-staff-access.js",
     "geo:sync": "node prisma/sync-geography.js"
   },
