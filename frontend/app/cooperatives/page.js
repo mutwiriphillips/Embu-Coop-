@@ -56,7 +56,7 @@ export default function CooperativesPage() {
     e.preventDefault();
     setError("");
     try {
-      await api.post("/cooperatives", form);
+      await api.post("/cooperatives", { ...form, countyId: isNationalAdmin ? form.countyId : user?.countyId });
       setShowForm(false);
       setForm({ name: "", registrationNumber: "", valueChain: "COFFEE", countyId: "", subCountyId: "", wardId: "" });
       load();
