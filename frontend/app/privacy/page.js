@@ -123,8 +123,11 @@ export default function PrivacyPolicyPage() {
             <li><b>Asset data</b> (Livestock, Poultry, Housing, and Transport SACCO cooperatives only): asset
               identifiers (ear tags, plate numbers, unit numbers), acquisition and current value, and a full
               lifecycle event history (health checks, valuations, transfers, sales, deaths, write-offs)</li>
-            <li><b>Governance data:</b> committee membership, gender composition (needed to verify the
-              statutory 1/3 gender-rotation rule), election records, and AGM minutes</li>
+            <li><b>Governance data:</b> committee and Supervisory Board membership, including each
+              office-holder&apos;s name, national ID number, phone number, and dates of appointment and
+              retirement; gender composition (needed to verify the statutory 1/3 gender-rotation rule),
+              election records, and AGM minutes. ID and phone numbers are visible only to authorised staff
+              and are never written to audit logs.</li>
             <li><b>Document data:</b> by-laws, audit reports, and other statutory filings uploaded by a
               Cooperative Manager or Field Officer</li>
             <li><b>Staff employment data:</b> job group, designation, phone, county/ward assignment, and

@@ -17,6 +17,7 @@ export default function CooperativesPage() {
   const { user } = useAuth();
   const isNationalAdmin = user?.role === "NATIONAL_ADMIN";
   const isSubCountyOfficer = user?.role === "SUBCOUNTY_OFFICER";
+  const canDelete = user?.role === "NATIONAL_ADMIN" || user?.role === "DIRECTOR";
 
   const [counties, setCounties] = useState([]);
   const [cooperatives, setCooperatives] = useState([]);
@@ -25,6 +26,7 @@ export default function CooperativesPage() {
   const [form, setForm] = useState({
     name: "",
     registrationNumber: "",
+    registrationDate: "",
     valueChain: "COFFEE",
     countyId: "",
     subCountyId: "",
@@ -58,10 +60,24 @@ export default function CooperativesPage() {
     try {
       await api.post("/cooperatives", { ...form, countyId: isNationalAdmin ? form.countyId : user?.countyId });
       setShowForm(false);
-      setForm({ name: "", registrationNumber: "", valueChain: "COFFEE", countyId: "", subCountyId: "", wardId: "" });
+      setForm({ name: "", registrationNumber: "", registrationDate: "", valueChain: "COFFEE", countyId: "", subCountyId: "", wardId: "" });
       load();
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to create cooperative");
+    }
+  }
+
+  async function handleDelete(c) {
+    const ok = window.confirm(
+      `Delete "${c.name}" (${c.registrationNumber})?\n\nThis only works for a cooperative with no members, documents, contributions or other records. It cannot be undone.`
+    );
+    if (!ok) return;
+    setError("");
+    try {
+      await api.delete(`/cooperatives/${c.id}`);
+      await load();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to delete cooperative");
     }
   }
 
@@ -95,6 +111,18 @@ export default function CooperativesPage() {
             value={form.registrationNumber}
             onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
           />
+          <label className="block text-xs text-gray-500">
+            Date of registration
+            <input
+              required
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              min="1900-01-01"
+              className="mt-0.5 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+              value={form.registrationDate}
+              onChange={(e) => setForm({ ...form, registrationDate: e.target.value })}
+            />
+          </label>
           <select
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={form.valueChain}
@@ -175,11 +203,14 @@ export default function CooperativesPage() {
           <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
             <tr>
               <th className="px-4 py-2">Name</th>
+              <th className="px-4 py-2">Reg. No.</th>
+              <th className="px-4 py-2">Registered</th>
               <th className="px-4 py-2">Value Chain</th>
               {isNationalAdmin && <th className="px-4 py-2">County</th>}
               <th className="px-4 py-2">Sub-County / Ward</th>
               <th className="px-4 py-2">Members</th>
               <th className="px-4 py-2">Documents</th>
+              {canDelete && <th className="px-4 py-2"></th>}
             </tr>
           </thead>
           <tbody>
@@ -190,16 +221,25 @@ export default function CooperativesPage() {
                     {c.name}
                   </Link>
                 </td>
+                <td className="px-4 py-2 text-gray-600">{c.registrationNumber}</td>
+                <td className="px-4 py-2 whitespace-nowrap text-gray-600">{c.registrationDate ? new Date(c.registrationDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }) : "—"}</td>
                 <td className="px-4 py-2">{c.valueChain}</td>
                 {isNationalAdmin && <td className="px-4 py-2">{c.county?.name}</td>}
                 <td className="px-4 py-2">{c.subCounty} / {c.ward}</td>
                 <td className="px-4 py-2">{c._count?.members ?? 0}</td>
                 <td className="px-4 py-2">{c._count?.documents ?? 0}</td>
+                {canDelete && (
+                  <td className="px-4 py-2 text-right">
+                    <button onClick={() => handleDelete(c)} className="text-xs text-red-600 hover:underline">
+                      Delete
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {cooperatives.length === 0 && (
               <tr>
-                <td colSpan={isNationalAdmin ? 6 : 5} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={7 + (isNationalAdmin ? 1 : 0) + (canDelete ? 1 : 0)} className="px-4 py-6 text-center text-gray-400">
                   {user?.role === "COOPERATIVE_MANAGER"
                     ? "Your account isn't linked to a cooperative yet. Ask your County Co-operative Office to assign you on the Staff & Access page."
                     : "No cooperatives found."}

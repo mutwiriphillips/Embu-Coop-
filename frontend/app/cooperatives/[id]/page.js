@@ -4,13 +4,87 @@ import { Fragment, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ProtectedRoute from "../../../components/ProtectedRoute";
 import api from "../../../lib/api";
+import { useAuth } from "../../../context/AuthContext";
 import { AuthedImage, openFile, useFileList, ACCEPT, HINT, formatBytes } from "../../../lib/files";
 
 // Documents and AGM papers store their file as "file:<id>" in storageKey.
 const fileIdOf = (key) => (typeof key === "string" && key.startsWith("file:") ? key.slice(5) : null);
 
 const ASSET_TRACKED_VALUE_CHAINS = ["LIVESTOCK", "POULTRY", "HOUSING", "TRANSPORT"];
-const BASE_TABS = ["Members", "Contributions", "Produce", "Input Credits", "Payouts", "Documents", "Governance", "AGM", "Credit Score"];
+const BASE_TABS = ["Members", "Contributions", "Produce", "Input Credits", "Payouts", "Documents", "Governance", "Supervisory Board", "AGM", "Credit Score"];
+
+// Dates are stored as calendar dates (midnight UTC). Showing them in UTC keeps
+// "5 Mar 2026" from turning into "4 Mar" on a computer set behind UTC.
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }) : "—");
+const toInputDate = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
+const todayInput = () => new Date().toISOString().slice(0, 10);
+const prettyRole = (r) => r.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+const STAFF_DELETE_ROLES = ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"];
+
+const inputCls = "mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-normal text-gray-900";
+function Field({ label, hint, className = "", children }) {
+  return (
+    <label className={`block text-xs font-medium text-gray-600 ${className}`}>
+      {label}
+      {children}
+      {hint && <span className="mt-0.5 block font-normal text-gray-400">{hint}</span>}
+    </label>
+  );
+}
+
+// Date on the Certificate of Registration. Shown to everyone; county staff
+// can set or correct it (a Cooperative Manager cannot, as with the reg. number).
+function RegistrationDate({ coop, onSaved }) {
+  const { user } = useAuth();
+  const canEdit = user?.role && user.role !== "COOPERATIVE_MANAGER";
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function save(e) {
+    e.preventDefault();
+    if (!value) return setError("Pick the date of registration");
+    setBusy(true);
+    setError("");
+    try {
+      await api.patch(`/cooperatives/${coop.id}`, { registrationDate: value });
+      setEditing(false);
+      onSaved();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Could not save the date");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mb-6 text-sm text-gray-500">
+      {!editing ? (
+        <>
+          Registered: <span className="text-gray-800">{coop.registrationDate ? fmtDate(coop.registrationDate) : "date not recorded"}</span>
+          {canEdit && (
+            <button
+              onClick={() => { setValue(toInputDate(coop.registrationDate)); setEditing(true); }}
+              className="ml-2 text-xs text-kenya-green hover:underline"
+            >
+              {coop.registrationDate ? "Edit" : "Add date"}
+            </button>
+          )}
+        </>
+      ) : (
+        <form onSubmit={save} className="flex flex-wrap items-center gap-2">
+          <span>Registered:</span>
+          <input type="date" min="1900-01-01" max={todayInput()} value={value} onChange={(e) => setValue(e.target.value)}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900" />
+          <button disabled={busy} className="rounded-md bg-kenya-green px-3 py-1 text-xs font-semibold text-white disabled:opacity-60">{busy ? "Saving…" : "Save"}</button>
+          <button type="button" onClick={() => setEditing(false)} className="text-xs text-gray-500 hover:underline">Cancel</button>
+          {error && <span className="text-xs text-red-600">{error}</span>}
+        </form>
+      )}
+    </div>
+  );
+}
 
 export default function CooperativeDetailPage() {
   const { id } = useParams();
@@ -47,11 +121,12 @@ export default function CooperativeDetailPage() {
     <ProtectedRoute>
       <div className="mb-1 text-xs font-medium uppercase text-kenya-gold">{coop.valueChain}</div>
       <h1 className="mb-1 text-2xl font-bold">{coop.name}</h1>
-      <p className="mb-6 text-sm text-gray-500">
+      <p className="mb-1 text-sm text-gray-500">
         {coop.registrationNumber} · {coop.county?.name ? `${coop.county.name} County · ` : ""}{coop.subCounty} / {coop.ward}
       </p>
+      <RegistrationDate coop={coop} onSaved={reload} />
 
-      <div className="mb-6 flex gap-2 border-b border-gray-200">
+      <div className="mb-6 flex gap-2 overflow-x-auto whitespace-nowrap border-b border-gray-200">
         {(ASSET_TRACKED_VALUE_CHAINS.includes(coop.valueChain)
           ? [...BASE_TABS.slice(0, 3), "Assets", ...BASE_TABS.slice(3)]
           : BASE_TABS
@@ -59,7 +134,7 @@ export default function CooperativeDetailPage() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium ${
+            className={`shrink-0 px-4 py-2 text-sm font-medium ${
               tab === t ? "border-b-2 border-kenya-green text-kenya-green" : "text-gray-500"
             }`}
           >
@@ -76,6 +151,7 @@ export default function CooperativeDetailPage() {
       {tab === "Payouts" && <PayoutsTab coop={coop} />}
       {tab === "Documents" && <DocumentsTab coop={coop} onChange={reload} />}
       {tab === "Governance" && <GovernanceTab coop={coop} onChange={reload} />}
+      {tab === "Supervisory Board" && <SupervisoryBoardTab coop={coop} />}
       {tab === "AGM" && <AGMTab coop={coop} onChange={reload} />}
       {tab === "Credit Score" && <CreditScoreTab coop={coop} />}
     </ProtectedRoute>
@@ -149,30 +225,54 @@ function MembersTab({ coop, onChange }) {
   );
 }
 
-const DOC_TYPES = ["BY_LAWS", "MEETING_MINUTES", "CODE_OF_CONDUCT", "AUDIT_REPORT", "SPOT_CHECK_REPORT", "OTHER"];
+const DOC_LABELS = {
+  REGISTRATION_CERTIFICATE: "Registration certificate",
+  BY_LAWS: "By-laws",
+  MEETING_MINUTES: "Meeting minutes",
+  CODE_OF_CONDUCT: "Code of conduct",
+  AUDIT_REPORT: "Audit report",
+  SPOT_CHECK_REPORT: "Spot-check report",
+  OTHER: "Other",
+};
+const DOC_TYPES = Object.keys(DOC_LABELS);
+const REVIEW_ROLES = ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"];
+const APPROVE_ROLES = ["NATIONAL_ADMIN", "DIRECTOR"];
+const certTitle = (coop) => `Certificate of Registration ${coop.registrationNumber}`;
 
 function DocumentsTab({ coop, onChange }) {
-  const [form, setForm] = useState({ docType: "BY_LAWS", title: "" });
+  const { user } = useAuth();
+  const docs = coop.documents || [];
+  // A rejected certificate doesn't count: a replacement may be uploaded.
+  const cert = docs.find((d) => d.docType === "REGISTRATION_CERTIFICATE" && d.status !== "REJECTED");
+  const [form, setForm] = useState({ docType: cert ? "BY_LAWS" : "REGISTRATION_CERTIFICATE", title: cert ? "" : certTitle(coop) });
   const [file, setFile] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // The real file now goes up with the form (it used to send a made-up path
-  // and a fixed 1 KB size, and no file was ever stored).
+  // Picking the certificate fills in its usual title (unless one was typed).
+  function pickType(docType) {
+    setForm((f) => {
+      const untouched = !f.title.trim() || f.title === certTitle(coop);
+      return { docType, title: untouched ? (docType === "REGISTRATION_CERTIFICATE" ? certTitle(coop) : "") : f.title };
+    });
+  }
+
+  // The real file goes up with the form (PDF or a clear photo, up to 10 MB).
   async function upload(e) {
     e.preventDefault();
+    const formEl = e.currentTarget;
     setError("");
     if (!file) { setError("Choose the document file first."); return; }
     setBusy(true);
     try {
       const data = new FormData();
       data.append("docType", form.docType);
-      data.append("title", form.title);
+      data.append("title", form.title.trim());
       data.append("file", file);
       await api.post(`/cooperatives/${coop.id}/documents`, data);
-      setForm({ docType: "BY_LAWS", title: "" });
+      setForm({ docType: form.docType === "REGISTRATION_CERTIFICATE" ? "BY_LAWS" : form.docType, title: "" });
       setFile(null);
-      e.target.reset();
+      formEl.reset();
       onChange();
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to upload document");
@@ -181,28 +281,70 @@ function DocumentsTab({ coop, onChange }) {
     }
   }
 
-  async function review(docId, approve) {
-    await api.post(`/cooperatives/${coop.id}/documents/${docId}/review`, { approve });
-    onChange();
+  async function act(fn) {
+    setError("");
+    try {
+      await fn();
+      onChange();
+    } catch (err) {
+      setError(err?.response?.data?.error || "That didn't work. Please try again.");
+    }
   }
 
-  async function approve(docId, approve) {
-    await api.post(`/cooperatives/${coop.id}/documents/${docId}/approve`, { approve });
-    onChange();
+  // A rejection needs a reason the cooperative can read and act on.
+  function decide(kind, docId, approve) {
+    let note;
+    if (!approve) {
+      note = window.prompt("Why is this document being rejected? The cooperative will see this reason.");
+      if (note === null) return;
+      if (note.trim().length < 3) { setError("Give a short reason for rejecting the document."); return; }
+    }
+    act(() => api.post(`/cooperatives/${coop.id}/documents/${docId}/${kind}`, { approve, ...(note ? { note: note.trim() } : {}) }));
   }
+
+  function remove(d) {
+    if (!window.confirm(`Delete "${d.title}"? The file is removed too and this can't be undone.`)) return;
+    act(() => api.delete(`/cooperatives/${coop.id}/documents/${d.id}`));
+  }
+
+  const canReview = REVIEW_ROLES.includes(user?.role);
+  const canApprove = APPROVE_ROLES.includes(user?.role);
+  const canDelete = STAFF_DELETE_ROLES.includes(user?.role);
 
   return (
     <div>
+      {cert ? (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+          <span className="font-semibold">Registration certificate on file</span>
+          <StatusBadge status={cert.status} />
+          {fileIdOf(cert.storageKey) && (
+            <button onClick={() => openFile(api, fileIdOf(cert.storageKey))} className="text-xs font-medium underline">View certificate</button>
+          )}
+        </div>
+      ) : (
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <span className="font-semibold">Registration certificate not on file.</span> Upload the society&apos;s certificate of registration below.
+        </div>
+      )}
+
       <form onSubmit={upload} className="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-4">
-        <select className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-          value={form.docType} onChange={(e) => setForm({ ...form, docType: e.target.value })}>
-          {DOC_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
-        </select>
-        <input required placeholder="Document title" className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
-          value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        <button type="submit" disabled={busy} className="rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-          {busy ? "Uploading…" : "Upload"}
-        </button>
+        <Field label="Document type">
+          <select className={inputCls} value={form.docType} onChange={(e) => pickType(e.target.value)}>
+            {DOC_TYPES.map((t) => (
+              <option key={t} value={t} disabled={t === "REGISTRATION_CERTIFICATE" && Boolean(cert)}>
+                {DOC_LABELS[t]}{t === "REGISTRATION_CERTIFICATE" && cert ? " (already on file)" : ""}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Title" className="md:col-span-2">
+          <input required className={inputCls} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        </Field>
+        <div className="flex items-end">
+          <button type="submit" disabled={busy} className="w-full rounded-md bg-kenya-green px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            {busy ? "Uploading…" : "Upload"}
+          </button>
+        </div>
         <div className="col-span-2 md:col-span-4">
           <input required type="file" accept={ACCEPT.document} onChange={(e) => setFile(e.target.files?.[0] || null)}
             className="block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-kenya-green/10 file:px-3 file:py-1.5 file:text-kenya-green" />
@@ -211,19 +353,20 @@ function DocumentsTab({ coop, onChange }) {
       </form>
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
             <tr>
               <th className="px-4 py-2">Title</th>
               <th className="px-4 py-2">Type</th>
+              <th className="px-4 py-2">Uploaded</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {(coop.documents || []).map((d) => (
-              <tr key={d.id} className="border-t border-gray-100">
+            {docs.map((d) => (
+              <tr key={d.id} className="border-t border-gray-100 align-top">
                 <td className="px-4 py-2 font-medium">
                   {d.title}
                   <div className="text-xs font-normal">
@@ -235,29 +378,36 @@ function DocumentsTab({ coop, onChange }) {
                       <span className="text-gray-400">No file stored (recorded before uploads were enabled)</span>
                     )}
                   </div>
+                  {d.status === "REJECTED" && d.rejectionNote && (
+                    <div className="mt-1 text-xs font-normal text-red-600">Rejected: {d.rejectionNote}</div>
+                  )}
                 </td>
-                <td className="px-4 py-2">{d.docType.replace(/_/g, " ")}</td>
+                <td className="px-4 py-2">{DOC_LABELS[d.docType] || d.docType.replace(/_/g, " ")}</td>
+                <td className="px-4 py-2 whitespace-nowrap">{fmtDate(d.createdAt)}</td>
                 <td className="px-4 py-2">
                   <StatusBadge status={d.status} />
                 </td>
-                <td className="px-4 py-2 space-x-2">
-                  {d.status === "PENDING" && (
+                <td className="space-x-2 px-4 py-2 whitespace-nowrap">
+                  {d.status === "PENDING" && canReview && (
                     <>
-                      <button onClick={() => review(d.id, true)} className="text-xs font-medium text-kenya-green hover:underline">Review ✓</button>
-                      <button onClick={() => review(d.id, false)} className="text-xs font-medium text-red-600 hover:underline">Reject</button>
+                      <button onClick={() => decide("review", d.id, true)} className="text-xs font-medium text-kenya-green hover:underline">Review ✓</button>
+                      <button onClick={() => decide("review", d.id, false)} className="text-xs font-medium text-red-600 hover:underline">Reject</button>
                     </>
                   )}
-                  {d.status === "REVIEWED" && (
+                  {d.status === "REVIEWED" && canApprove && (
                     <>
-                      <button onClick={() => approve(d.id, true)} className="text-xs font-medium text-kenya-green hover:underline">Director Approve</button>
-                      <button onClick={() => approve(d.id, false)} className="text-xs font-medium text-red-600 hover:underline">Reject</button>
+                      <button onClick={() => decide("approve", d.id, true)} className="text-xs font-medium text-kenya-green hover:underline">Director Approve</button>
+                      <button onClick={() => decide("approve", d.id, false)} className="text-xs font-medium text-red-600 hover:underline">Reject</button>
                     </>
+                  )}
+                  {canDelete && (d.status !== "APPROVED" || canApprove) && (
+                    <button onClick={() => remove(d)} className="text-xs font-medium text-gray-500 hover:text-red-600 hover:underline">Delete</button>
                   )}
                 </td>
               </tr>
             ))}
-            {(coop.documents || []).length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">No documents uploaded.</td></tr>
+            {docs.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">No documents uploaded.</td></tr>
             )}
           </tbody>
         </table>
@@ -277,6 +427,8 @@ function StatusBadge({ status }) {
     COMPLIANT: "bg-green-100 text-green-800",
     NON_COMPLIANT: "bg-red-100 text-red-800",
     UPCOMING: "bg-gray-100 text-gray-700",
+    SERVING: "bg-green-100 text-green-800",
+    RETIRED: "bg-gray-100 text-gray-600",
   };
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colors[status] || "bg-gray-100 text-gray-700"}`}>
@@ -285,24 +437,58 @@ function StatusBadge({ status }) {
   );
 }
 
-const ROLES = ["CHAIRPERSON", "VICE_CHAIRPERSON", "SECRETARY", "TREASURER", "BOARD_MEMBER", "EXECUTIVE_MANAGER"];
+const MGMT_ROLES = ["CHAIRPERSON", "VICE_CHAIRPERSON", "SECRETARY", "TREASURER", "BOARD_MEMBER", "EXECUTIVE_MANAGER"];
+const OVERRIDE_ROLES = ["NATIONAL_ADMIN", "DIRECTOR"];
+const blankMember = (role = "BOARD_MEMBER") => ({
+  fullName: "", gender: "MALE", role, nationalId: "", phoneNumber: "", electionDate: "", appointmentDate: "", retirementDate: "",
+});
 
 function GovernanceTab({ coop, onChange }) {
-  const [members, setMembers] = useState([{ fullName: "", gender: "MALE", role: "CHAIRPERSON", electionDate: "" }]);
+  const { user } = useAuth();
+  const canOverride = OVERRIDE_ROLES.includes(user?.role);
+  const [members, setMembers] = useState([blankMember("CHAIRPERSON")]);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState("");
   const [complianceWarning, setComplianceWarning] = useState(null);
 
-  function updateMember(idx, field, value) {
-    setMembers((prev) => prev.map((m, i) => (i === idx ? { ...m, [field]: value } : m)));
-  }
+  const committees = coop.committees || [];
+  const current = committees.filter((c) => c.current);
+  const previous = committees.filter((c) => !c.current);
 
-  function addRow() {
-    setMembers((prev) => [...prev, { fullName: "", gender: "MALE", role: "BOARD_MEMBER", electionDate: "" }]);
+  function updateMember(idx, field, value) {
+    setMembers((prev) =>
+      prev.map((m, i) => {
+        if (i !== idx) return m;
+        const next = { ...m, [field]: value };
+        // The appointment date is usually the day of the election; offer it
+        // rather than make the user type the same date twice.
+        if (field === "electionDate" && !m.appointmentDate) next.appointmentDate = value;
+        return next;
+      })
+    );
+  }
+  const addRow = () => setMembers((prev) => [...prev, blankMember()]);
+  const removeRow = (idx) => setMembers((prev) => prev.filter((_, i) => i !== idx));
+
+  // Start from the committee in force, keeping only people still serving, so
+  // a change of one office-holder doesn't mean typing everyone again.
+  function copyCurrent() {
+    const live = (current[0]?.members || []).filter((m) => !m.retirementDate || new Date(m.retirementDate) > new Date());
+    if (!live.length) return;
+    setMembers(
+      live.map((m) => ({
+        fullName: m.fullName, gender: m.gender, role: m.role, nationalId: m.nationalId || "", phoneNumber: m.phoneNumber || "",
+        electionDate: toInputDate(m.electionDate), appointmentDate: toInputDate(m.appointmentDate || m.electionDate), retirementDate: toInputDate(m.retirementDate),
+      }))
+    );
+    setSaved("");
+    setError("");
   }
 
   async function saveCommittee(e, overrideJustification) {
     e?.preventDefault?.();
     setError("");
+    setSaved("");
     setComplianceWarning(null);
     try {
       await api.post(`/cooperatives/${coop.id}/governance/committees`, {
@@ -311,6 +497,8 @@ function GovernanceTab({ coop, onChange }) {
         members,
         ...(overrideJustification ? { overrideJustification } : {}),
       });
+      setMembers([blankMember("CHAIRPERSON")]);
+      setSaved("Committee saved. It is now the committee in force; the previous one is kept below as history.");
       onChange();
     } catch (err) {
       if (err?.response?.status === 422) {
@@ -323,23 +511,54 @@ function GovernanceTab({ coop, onChange }) {
 
   return (
     <div>
-      <h3 className="mb-2 font-semibold">Submit / Update Management Committee</h3>
-      <form onSubmit={(e) => saveCommittee(e)} className="mb-4 space-y-2 rounded-lg border border-gray-200 bg-white p-4">
+      <div className="mb-2 flex flex-wrap items-center gap-3">
+        <h3 className="font-semibold">Submit / Update Management Committee</h3>
+        {current.length > 0 && (
+          <button type="button" onClick={copyCurrent} className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">
+            Start from the current committee
+          </button>
+        )}
+      </div>
+      <form onSubmit={(e) => saveCommittee(e)} className="mb-4 space-y-3 rounded-lg border border-gray-200 bg-white p-4">
         {members.map((m, i) => (
-          <div key={i} className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            <input required placeholder="Full name" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-              value={m.fullName} onChange={(e) => updateMember(i, "fullName", e.target.value)} />
-            <select className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-              value={m.gender} onChange={(e) => updateMember(i, "gender", e.target.value)}>
-              <option value="MALE">Male</option>
-              <option value="FEMALE">Female</option>
-            </select>
-            <select className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-              value={m.role} onChange={(e) => updateMember(i, "role", e.target.value)}>
-              {ROLES.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
-            </select>
-            <input required type="date" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-              value={m.electionDate} onChange={(e) => updateMember(i, "electionDate", e.target.value)} />
+          <div key={i} className="rounded-md border border-gray-100 bg-gray-50/60 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-500">Member {i + 1}</span>
+              {members.length > 1 && (
+                <button type="button" onClick={() => removeRow(i)} className="text-xs text-red-600 hover:underline">Remove</button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <Field label="Full name">
+                <input required className={inputCls} value={m.fullName} onChange={(e) => updateMember(i, "fullName", e.target.value)} />
+              </Field>
+              <Field label="Gender">
+                <select className={inputCls} value={m.gender} onChange={(e) => updateMember(i, "gender", e.target.value)}>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                </select>
+              </Field>
+              <Field label="Role">
+                <select className={inputCls} value={m.role} onChange={(e) => updateMember(i, "role", e.target.value)}>
+                  {MGMT_ROLES.map((r) => <option key={r} value={r}>{prettyRole(r)}</option>)}
+                </select>
+              </Field>
+              <Field label="ID number">
+                <input required inputMode="numeric" autoComplete="off" className={inputCls} value={m.nationalId} onChange={(e) => updateMember(i, "nationalId", e.target.value)} />
+              </Field>
+              <Field label="Phone number">
+                <input required type="tel" placeholder="0712 345 678" className={inputCls} value={m.phoneNumber} onChange={(e) => updateMember(i, "phoneNumber", e.target.value)} />
+              </Field>
+              <Field label="Date elected">
+                <input required type="date" className={inputCls} value={m.electionDate} onChange={(e) => updateMember(i, "electionDate", e.target.value)} />
+              </Field>
+              <Field label="Date of appointment">
+                <input required type="date" className={inputCls} value={m.appointmentDate} onChange={(e) => updateMember(i, "appointmentDate", e.target.value)} />
+              </Field>
+              <Field label="Retirement date" hint="Leave blank while serving">
+                <input type="date" min={m.appointmentDate || undefined} className={inputCls} value={m.retirementDate} onChange={(e) => updateMember(i, "retirementDate", e.target.value)} />
+              </Field>
+            </div>
           </div>
         ))}
         <div className="flex gap-2">
@@ -350,41 +569,157 @@ function GovernanceTab({ coop, onChange }) {
             Save Committee
           </button>
         </div>
+        <p className="text-xs text-gray-400">
+          The term (3 years) runs from the date elected. Someone whose retirement date has passed no longer counts toward the 1/3 gender rule.
+        </p>
       </form>
 
+      {saved && <p className="mb-3 text-sm text-green-700">{saved}</p>}
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
       {complianceWarning && (
         <div className="mb-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
           <p className="font-semibold">{complianceWarning.error}</p>
           <p className="mt-1">{complianceWarning.detail?.reason}</p>
-          <p className="mt-2 text-xs">A Director can override this with a logged justification.</p>
-          <OverrideForm onOverride={(justification) => saveCommittee(null, justification)} />
+          {canOverride ? (
+            <>
+              <p className="mt-2 text-xs">As Director you can override this with a logged justification.</p>
+              <OverrideForm onOverride={(justification) => saveCommittee(null, justification)} />
+            </>
+          ) : (
+            <p className="mt-2 text-xs">Only your County Director can override this rule. Adjust the committee so no gender holds more than two-thirds of the elected seats, or ask the Director to submit it.</p>
+          )}
         </div>
       )}
 
-      <h3 className="mb-2 mt-6 font-semibold">Existing Committees</h3>
+      <h3 className="mb-2 mt-6 font-semibold">Committee in force</h3>
       <div className="space-y-3">
-        {(coop.committees || []).map((c) => (
-          <div key={c.id} className="rounded-lg border border-gray-200 bg-white p-4">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-sm font-medium">{c.committeeType} Committee</span>
-              <StatusBadge status={c.status} />
-              {c.complianceOverride && <span className="text-xs text-amber-600">(Director override logged)</span>}
-            </div>
-            <ul className="text-sm text-gray-600">
-              {c.members?.map((m) => (
-                <li key={m.id}>
-                  {m.fullName} — {m.role.replace(/_/g, " ")} ({m.gender}) · re-election due{" "}
-                  {new Date(m.reelectionDueDate).toLocaleDateString()}
-                </li>
-              ))}
-            </ul>
+        {current.map((c) => <CommitteeCard key={c.id} coop={coop} committee={c} onChange={onChange} />)}
+        {committees.length === 0 && <p className="text-gray-400">No committees recorded yet.</p>}
+      </div>
+
+      {previous.length > 0 && (
+        <details className="mt-6">
+          <summary className="cursor-pointer text-sm font-semibold text-gray-600">Previous committees ({previous.length}), kept as history</summary>
+          <div className="mt-3 space-y-3">
+            {previous.map((c) => <CommitteeCard key={c.id} coop={coop} committee={c} onChange={onChange} history />)}
           </div>
-        ))}
-        {(coop.committees || []).length === 0 && <p className="text-gray-400">No committees recorded yet.</p>}
+        </details>
+      )}
+    </div>
+  );
+}
+
+function CommitteeCard({ coop, committee: c, onChange, history }) {
+  return (
+    <div className={`rounded-lg border border-gray-200 bg-white p-4 ${history ? "opacity-80" : ""}`}>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium">{prettyRole(c.committeeType)} Committee</span>
+        <StatusBadge status={c.status} />
+        {c.complianceOverride && <span className="text-xs text-amber-600">(Director override logged)</span>}
+        <span className="text-xs text-gray-400">Submitted {fmtDate(c.createdAt)}{history ? " · superseded" : ""}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs uppercase text-gray-400">
+            <tr>
+              <th className="py-1 pr-3">Name</th>
+              <th className="py-1 pr-3">Role</th>
+              <th className="py-1 pr-3">ID number</th>
+              <th className="py-1 pr-3">Phone</th>
+              <th className="py-1 pr-3">Appointed</th>
+              <th className="py-1 pr-3">Re-election due</th>
+              <th className="py-1 pr-3">Retirement</th>
+              <th className="py-1" />
+            </tr>
+          </thead>
+          <tbody>
+            {(c.members || []).map((m) => (
+              <CommitteeMemberRow key={m.id} coop={coop} committee={c} m={m} onChange={onChange} />
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
+  );
+}
+
+function CommitteeMemberRow({ coop, committee, m, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [f, setF] = useState({});
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const retired = m.retirementDate && new Date(m.retirementDate) <= new Date();
+  const missing = <span className="text-amber-600">missing</span>;
+
+  function start() {
+    setF({
+      fullName: m.fullName, nationalId: m.nationalId || "", phoneNumber: m.phoneNumber || "",
+      appointmentDate: toInputDate(m.appointmentDate), retirementDate: toInputDate(m.retirementDate),
+    });
+    setError("");
+    setEditing(true);
+  }
+
+  async function save(e) {
+    e.preventDefault();
+    // Send only what changed; fields never filled in (older records) are left alone.
+    const body = {};
+    if (f.fullName.trim() && f.fullName.trim() !== m.fullName) body.fullName = f.fullName.trim();
+    if (f.nationalId.trim() && f.nationalId.trim() !== (m.nationalId || "")) body.nationalId = f.nationalId.trim();
+    if (f.phoneNumber.trim() && f.phoneNumber.trim() !== (m.phoneNumber || "")) body.phoneNumber = f.phoneNumber.trim();
+    if (f.appointmentDate && f.appointmentDate !== toInputDate(m.appointmentDate)) body.appointmentDate = f.appointmentDate;
+    if (f.retirementDate !== toInputDate(m.retirementDate)) body.retirementDate = f.retirementDate || null;
+    if (!Object.keys(body).length) { setEditing(false); return; }
+    setBusy(true);
+    setError("");
+    try {
+      await api.patch(`/cooperatives/${coop.id}/governance/committees/${committee.id}/members/${m.id}`, body);
+      setEditing(false);
+      onChange();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Couldn't save the changes");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <tr className={`border-t border-gray-100 ${retired ? "text-gray-400" : "text-gray-700"}`}>
+        <td className="py-1.5 pr-3 font-medium">
+          {m.fullName} <span className="font-normal text-gray-400">({m.gender === "FEMALE" ? "F" : "M"})</span>
+          {retired && <span className="ml-2"><StatusBadge status="RETIRED" /></span>}
+        </td>
+        <td className="py-1.5 pr-3">{prettyRole(m.role)}</td>
+        <td className="py-1.5 pr-3">{m.nationalId || missing}</td>
+        <td className="py-1.5 pr-3 whitespace-nowrap">{m.phoneNumber || missing}</td>
+        <td className="py-1.5 pr-3 whitespace-nowrap">{m.appointmentDate ? fmtDate(m.appointmentDate) : missing}</td>
+        <td className="py-1.5 pr-3 whitespace-nowrap">{fmtDate(m.reelectionDueDate)}</td>
+        <td className="py-1.5 pr-3 whitespace-nowrap">{m.retirementDate ? fmtDate(m.retirementDate) : "Serving"}</td>
+        <td className="py-1.5 text-right">
+          <button onClick={start} className="text-xs font-medium text-kenya-green hover:underline">Edit</button>
+        </td>
+      </tr>
+      {editing && (
+        <tr className="bg-gray-50/70">
+          <td colSpan={8} className="p-3">
+            <form onSubmit={save} className="grid grid-cols-2 gap-2 md:grid-cols-5">
+              <Field label="Full name"><input className={inputCls} value={f.fullName} onChange={(e) => setF({ ...f, fullName: e.target.value })} /></Field>
+              <Field label="ID number"><input className={inputCls} value={f.nationalId} onChange={(e) => setF({ ...f, nationalId: e.target.value })} /></Field>
+              <Field label="Phone number"><input type="tel" className={inputCls} value={f.phoneNumber} onChange={(e) => setF({ ...f, phoneNumber: e.target.value })} /></Field>
+              <Field label="Date of appointment"><input type="date" className={inputCls} value={f.appointmentDate} onChange={(e) => setF({ ...f, appointmentDate: e.target.value })} /></Field>
+              <Field label="Retirement date" hint="Blank = still serving"><input type="date" min={f.appointmentDate || undefined} className={inputCls} value={f.retirementDate} onChange={(e) => setF({ ...f, retirementDate: e.target.value })} /></Field>
+              <div className="col-span-2 flex items-center gap-2 md:col-span-5">
+                <button type="submit" disabled={busy} className="rounded-md bg-kenya-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : "Save"}</button>
+                <button type="button" onClick={() => setEditing(false)} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium">Cancel</button>
+                {error && <span className="text-xs text-red-600">{error}</span>}
+              </div>
+            </form>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -399,13 +734,234 @@ function OverrideForm({ onOverride }) {
         onChange={(e) => setJustification(e.target.value)}
       />
       <button
-        onClick={() => onOverride(justification)}
-        disabled={justification.length < 10}
+        onClick={() => onOverride(justification.trim())}
+        disabled={justification.trim().length < 10}
         className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
       >
         Override & Submit
       </button>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Supervisory Board: Chairman, Honorary Secretary, Member
+// ---------------------------------------------------------------------------
+const BOARD_SEATS = [
+  { position: "CHAIRMAN", label: "Chairman" },
+  { position: "HONORARY_SECRETARY", label: "Honorary Secretary" },
+  { position: "MEMBER", label: "Member" },
+];
+const BOARD_STATUS = {
+  SERVING: { text: "Serving", cls: "bg-green-100 text-green-800" },
+  TERM_EXPIRING: { text: "Term ends soon", cls: "bg-yellow-100 text-yellow-800" },
+  TERM_EXPIRED: { text: "Term ended: re-election due", cls: "bg-red-100 text-red-800" },
+  RETIRED: { text: "Retired", cls: "bg-gray-100 text-gray-600" },
+};
+const BoardBadge = ({ status }) => {
+  const b = BOARD_STATUS[status] || { text: status, cls: "bg-gray-100 text-gray-700" };
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${b.cls}`}>{b.text}</span>;
+};
+
+function SupervisoryBoardTab({ coop }) {
+  const { user } = useAuth();
+  const base = `/cooperatives/${coop.id}/governance/supervisory-board`;
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+  const [open, setOpen] = useState(null); // { kind: "appoint" | "edit" | "retire", position?, id? }
+  const canDelete = STAFF_DELETE_ROLES.includes(user?.role);
+
+  function load() {
+    return api.get(base).then((res) => { setRows(res.data); setError(""); })
+      .catch((err) => setError(err?.response?.data?.error || "Failed to load the Supervisory Board"));
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [coop.id]);
+
+  async function remove(r) {
+    if (!window.confirm(`Delete ${r.fullName} (${r.positionLabel}) from the record? Use this only for an entry made by mistake. For someone who served and left, record a retirement date instead.`)) return;
+    try { await api.delete(`${base}/${r.id}`); await load(); }
+    catch (err) { setError(err?.response?.data?.error || "Couldn't delete that entry"); }
+  }
+
+  if (!rows) return error ? <p className="text-sm text-red-600">{error}</p> : <p className="text-gray-500">Loading…</p>;
+
+  const serving = (pos) => rows.filter((r) => r.position === pos && r.status !== "RETIRED").sort((a, b) => new Date(b.appointmentDate) - new Date(a.appointmentDate))[0];
+  const past = rows.filter((r) => r.status === "RETIRED").sort((a, b) => new Date(b.retirementDate) - new Date(a.retirementDate));
+  const filled = BOARD_SEATS.filter((s) => serving(s.position)).length;
+
+  return (
+    <div>
+      <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="font-semibold">Supervisory Board</h3>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${filled === 3 ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
+            {filled} of 3 seats filled
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Every society has a supervisory committee of three members, each elected for three years, with one retiring each year (Co-operative Societies Rules, 2004, rule 28(1)).
+          Its duties are kept separate from the Management Committee.
+        </p>
+      </div>
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        {BOARD_SEATS.map((seat) => {
+          const holder = serving(seat.position);
+          const succeeding = holder && holder.retirementDate; // retires on a future date; a successor may be lined up
+          return (
+            <div key={seat.position} className="flex flex-col rounded-lg border border-gray-200 bg-white p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-kenya-gold">{seat.label}</span>
+                {holder && <BoardBadge status={holder.status} />}
+              </div>
+
+              {holder ? (
+                <div className="flex-1 text-sm">
+                  <p className="text-base font-semibold">{holder.fullName}</p>
+                  <dl className="mt-2 space-y-0.5 text-gray-600">
+                    <div><dt className="inline text-gray-400">ID number: </dt><dd className="inline">{holder.nationalId}</dd></div>
+                    <div><dt className="inline text-gray-400">Phone: </dt><dd className="inline">{holder.phoneNumber}</dd></div>
+                    <div><dt className="inline text-gray-400">Appointed: </dt><dd className="inline">{fmtDate(holder.appointmentDate)}</dd></div>
+                    <div><dt className="inline text-gray-400">Term ends: </dt><dd className="inline">{fmtDate(holder.termEndsOn)}</dd></div>
+                    {holder.retirementDate && <div><dt className="inline text-gray-400">Retires: </dt><dd className="inline">{fmtDate(holder.retirementDate)}</dd></div>}
+                  </dl>
+                  {holder.alsoOnManagementCommittee && (
+                    <p className="mt-2 rounded-md bg-amber-50 p-2 text-xs text-amber-800">
+                      This person is also serving on the Management Committee. Rule 28(4) keeps the supervisory committee&apos;s duties separate from the committee&apos;s, so check this is intended.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="flex-1 text-sm text-gray-400">Seat vacant.</p>
+              )}
+
+              <div className="mt-3 flex flex-wrap gap-3 text-xs font-medium">
+                {holder ? (
+                  <>
+                    <button onClick={() => setOpen({ kind: "edit", id: holder.id })} className="text-kenya-green hover:underline">Edit</button>
+                    <button onClick={() => setOpen({ kind: "retire", id: holder.id })} className="text-kenya-green hover:underline">Record retirement</button>
+                    {succeeding && <button onClick={() => setOpen({ kind: "appoint", position: seat.position })} className="text-kenya-green hover:underline">Appoint successor</button>}
+                    {canDelete && <button onClick={() => remove(holder)} className="text-gray-400 hover:text-red-600 hover:underline">Delete</button>}
+                  </>
+                ) : (
+                  <button onClick={() => setOpen({ kind: "appoint", position: seat.position })} className="rounded-md bg-kenya-green px-3 py-1.5 text-white">Appoint {seat.label}</button>
+                )}
+              </div>
+
+              {open?.kind === "appoint" && open.position === seat.position && (
+                <BoardForm title={`Appoint ${seat.label}`} fields={{ fullName: "", nationalId: "", phoneNumber: "", appointmentDate: "", retirementDate: "" }}
+                  submitLabel="Appoint" onCancel={() => setOpen(null)}
+                  onSubmit={async (v) => { await api.post(base, { position: seat.position, ...v }); setOpen(null); await load(); }} />
+              )}
+              {holder && open?.kind === "edit" && open.id === holder.id && (
+                <BoardForm title="Edit details" editing fields={editFields(holder)} submitLabel="Save" onCancel={() => setOpen(null)}
+                  onSubmit={async (v) => { await api.patch(`${base}/${holder.id}`, diffBoard(holder, v)); setOpen(null); await load(); }} />
+              )}
+              {holder && open?.kind === "retire" && open.id === holder.id && (
+                <BoardForm title={`Record retirement of ${holder.fullName}`} retireOnly fields={{ retirementDate: todayInput() }} submitLabel="Record retirement"
+                  min={toInputDate(holder.appointmentDate)} onCancel={() => setOpen(null)}
+                  onSubmit={async (v) => { await api.patch(`${base}/${holder.id}`, { retirementDate: v.retirementDate }); setOpen(null); await load(); }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <h3 className="mb-2 mt-6 font-semibold">Past holders</h3>
+      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+            <tr>
+              <th className="px-4 py-2">Position</th><th className="px-4 py-2">Name</th><th className="px-4 py-2">ID number</th>
+              <th className="px-4 py-2">Phone</th><th className="px-4 py-2">Appointed</th><th className="px-4 py-2">Retired</th><th className="px-4 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {past.map((r) => (
+              <Fragment key={r.id}>
+                <tr className="border-t border-gray-100 text-gray-600">
+                  <td className="px-4 py-2">{r.positionLabel}</td>
+                  <td className="px-4 py-2 font-medium">{r.fullName}</td>
+                  <td className="px-4 py-2">{r.nationalId}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{r.phoneNumber}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{fmtDate(r.appointmentDate)}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{fmtDate(r.retirementDate)}</td>
+                  <td className="space-x-3 px-4 py-2 text-right text-xs font-medium whitespace-nowrap">
+                    <button onClick={() => setOpen({ kind: "edit", id: r.id })} className="text-kenya-green hover:underline">Edit</button>
+                    {canDelete && <button onClick={() => remove(r)} className="text-gray-400 hover:text-red-600 hover:underline">Delete</button>}
+                  </td>
+                </tr>
+                {open?.kind === "edit" && open.id === r.id && (
+                  <tr><td colSpan={7} className="bg-gray-50/70 p-3">
+                    <BoardForm title="Edit details" editing fields={editFields(r)} submitLabel="Save" onCancel={() => setOpen(null)}
+                      onSubmit={async (v) => { await api.patch(`${base}/${r.id}`, diffBoard(r, v)); setOpen(null); await load(); }} />
+                  </td></tr>
+                )}
+              </Fragment>
+            ))}
+            {past.length === 0 && <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400">No one has retired from the board yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const editFields = (r) => ({
+  fullName: r.fullName, nationalId: r.nationalId, phoneNumber: r.phoneNumber,
+  appointmentDate: toInputDate(r.appointmentDate), retirementDate: toInputDate(r.retirementDate),
+});
+// Send only what changed; clearing the retirement date sends null.
+function diffBoard(r, v) {
+  const was = editFields(r);
+  const body = {};
+  for (const k of ["fullName", "nationalId", "phoneNumber", "appointmentDate"]) if (v[k].trim() && v[k].trim() !== was[k]) body[k] = v[k].trim();
+  if (v.retirementDate !== was.retirementDate) body.retirementDate = v.retirementDate || null;
+  return body;
+}
+
+// One small form for appointing, editing and recording a retirement.
+function BoardForm({ title, fields, submitLabel, onSubmit, onCancel, editing, retireOnly, min }) {
+  const [v, setV] = useState(fields);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await onSubmit(v);
+    } catch (err) {
+      setError(err?.response?.data?.error || "Couldn't save that");
+      setBusy(false);
+    }
+  }
+  const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
+
+  return (
+    <form onSubmit={submit} className="mt-3 space-y-2 rounded-md border border-gray-100 bg-gray-50/70 p-3">
+      <p className="text-xs font-semibold text-gray-600">{title}</p>
+      {!retireOnly && (
+        <>
+          <Field label="Full name"><input required className={inputCls} value={v.fullName} onChange={set("fullName")} /></Field>
+          <Field label="ID number"><input required inputMode="numeric" autoComplete="off" className={inputCls} value={v.nationalId} onChange={set("nationalId")} /></Field>
+          <Field label="Phone number"><input required type="tel" placeholder="0712 345 678" className={inputCls} value={v.phoneNumber} onChange={set("phoneNumber")} /></Field>
+          <Field label="Date of appointment"><input required type="date" className={inputCls} value={v.appointmentDate} onChange={set("appointmentDate")} /></Field>
+        </>
+      )}
+      {(editing || retireOnly) && (
+        <Field label="Retirement date" hint={retireOnly ? undefined : "Blank = still serving"}>
+          <input required={retireOnly} type="date" min={min || v.appointmentDate || undefined} className={inputCls} value={v.retirementDate} onChange={set("retirementDate")} />
+        </Field>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="submit" disabled={busy} className="rounded-md bg-kenya-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : submitLabel}</button>
+        <button type="button" onClick={onCancel} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium">Cancel</button>
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </form>
   );
 }
 
