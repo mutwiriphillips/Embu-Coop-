@@ -6,6 +6,7 @@ const { httpError } = require("../utils/geography");
 const { assertBelongs } = require("../utils/ownership");
 const {
   checkOneThirdRule,
+  genderRuleEnforced,
   deriveCommitteeStatus,
   computeReelectionDueDate,
   isServing,
@@ -110,8 +111,13 @@ async function saveCommittee(req, res) {
     }))
   );
 
-  const justification = String(req.body.overrideJustification || "").trim();
-  if (!ruleResult.compliant) {
+  // While enforcement is suspended nothing is blocked and nothing counts as an
+  // "override": the committee is saved as submitted and its status still shows
+  // NON_COMPLIANT, so the imbalance stays visible for when enforcement starts.
+  const enforced = genderRuleEnforced();
+  const blocking = enforced && !ruleResult.compliant;
+  const justification = enforced ? String(req.body.overrideJustification || "").trim() : "";
+  if (blocking) {
     if (!justification) {
       return res.status(422).json({
         error: "1/3 gender rotation rule violation — submission blocked",
@@ -138,8 +144,8 @@ async function saveCommittee(req, res) {
       committeeType: data.committeeType,
       termLengthYears: data.termLengthYears,
       status,
-      complianceOverride: !ruleResult.compliant,
-      overrideJustification: !ruleResult.compliant ? justification : null,
+      complianceOverride: blocking,
+      overrideJustification: blocking ? justification : null,
       members: {
         create: data.members.map((m) => ({
           fullName: m.fullName,
@@ -162,10 +168,15 @@ async function saveCommittee(req, res) {
     action: "SAVE_COMMITTEE",
     entityType: "Committee",
     entityId: committee.id,
-    metadata: { ruleResult, overridden: !ruleResult.compliant },
+    metadata: { ruleResult, overridden: blocking, genderRuleEnforced: enforced },
   });
 
-  res.status(201).json({ committee, complianceCheck: ruleResult });
+  res.status(201).json({ committee, complianceCheck: ruleResult, genderRuleEnforced: enforced });
+}
+
+// Lets the app say whether a lopsided committee will be blocked or just flagged.
+async function getRules(req, res) {
+  res.json({ genderRuleEnforced: genderRuleEnforced() });
 }
 
 async function listCommittees(req, res) {
@@ -469,6 +480,7 @@ module.exports = {
   saveCommittee,
   listCommittees,
   overrideCommittee,
+  getRules,
   addSignatory,
   applyCandidate,
   listCandidates,

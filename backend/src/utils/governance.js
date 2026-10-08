@@ -135,7 +135,17 @@ function boardMemberStatus(member, now = new Date()) {
   return life === "UPCOMING" ? "SERVING" : life;
 }
 
+// The 1/3 gender rule is measured and reported on every committee, but whether
+// a non-compliant composition is BLOCKED at registration is a switch. It is
+// off while most societies are still non-compliant; set ENFORCE_GENDER_RULE=true
+// on the backend service to start blocking again. Read at call time so a
+// restart is the only step needed.
+function genderRuleEnforced() {
+  return String(process.env.ENFORCE_GENDER_RULE || "").trim().toLowerCase() === "true";
+}
+
 module.exports = {
+  genderRuleEnforced,
   isServing,
   latestPerType,
   withLiveStatus,

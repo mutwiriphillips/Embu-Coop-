@@ -9,6 +9,9 @@ const router = express.Router({ mergeParams: true });
 router.use(authenticate);
 router.use(requireCooperativeAccess());
 
+// Whether the 1/3 gender rule is currently enforced
+router.get("/rules", requirePermission("governance", "canView"), ctrl.getRules);
+
 // Committees
 router.get("/committees", requirePermission("governance", "canView"), ctrl.listCommittees);
 router.post("/committees", requirePermission("governance", "canEdit"), ctrl.saveCommittee);
