@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ProtectedRoute from "../../../components/ProtectedRoute";
 import api from "../../../lib/api";
+import PdfListImport, { uploadSupportingPdf } from "../../../components/PdfListImport";
 import { useAuth } from "../../../context/AuthContext";
 import { AuthedImage, openFile, useFileList, ACCEPT, HINT, formatBytes } from "../../../lib/files";
 
@@ -176,6 +177,7 @@ function MembersTab({ coop, onChange }) {
 
   return (
     <div>
+      <PdfListImport coop={coop} kind="MEMBERS" onImported={onChange} />
       <form onSubmit={addMember} className="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-5">
         <input required placeholder="Legal Name" className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
           value={form.legalName} onChange={(e) => setForm({ ...form, legalName: e.target.value })} />
@@ -450,6 +452,8 @@ function GovernanceTab({ coop, onChange }) {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const [complianceWarning, setComplianceWarning] = useState(null);
+  // A PDF whose names filled the form; filed under Documents once the committee is saved.
+  const [sourcePdf, setSourcePdf] = useState(null);
   // Unknown until the server answers; treat as "not enforced" so nothing is shown that could be wrong.
   const [enforced, setEnforced] = useState(false);
   useEffect(() => {
@@ -500,8 +504,18 @@ function GovernanceTab({ coop, onChange }) {
       });
       setMembers([blankMember("CHAIRPERSON")]);
       const flagged = res.data?.genderRuleEnforced === false && res.data?.complianceCheck && !res.data.complianceCheck.compliant;
+      let docNote = "";
+      if (sourcePdf) {
+        try {
+          await uploadSupportingPdf(coop.id, sourcePdf, "COMMITTEE");
+          docNote = " The PDF is kept under Documents as a supporting file.";
+        } catch (e2) {
+          docNote = ` The PDF itself could not be filed under Documents (${e2?.response?.data?.error || "upload failed"}); upload it there by hand.`;
+        }
+        setSourcePdf(null);
+      }
       setSaved(
-        "Committee saved. It is now the committee in force; the previous one is kept below as history." +
+        "Committee saved. It is now the committee in force; the previous one is kept below as history." + docNote +
           (flagged ? " Note: it does not yet meet the 1/3 gender rule. This is recorded as Non-compliant but did not block saving." : "")
       );
       onChange();
@@ -524,6 +538,14 @@ function GovernanceTab({ coop, onChange }) {
           </button>
         )}
       </div>
+      <PdfListImport coop={coop} kind="COMMITTEE" label="Import committee from PDF"
+        onUseRows={(rows, f) => { setMembers(rows); setSourcePdf(f); setSaved("Filled the form from the PDF. Check each person, then press Save Committee."); setError(""); setComplianceWarning(null); }} />
+      {sourcePdf && (
+        <p className="mb-2 text-xs text-gray-600">
+          Supporting file: <b>{sourcePdf.name}</b> will be kept under Documents when you save.{" "}
+          <button type="button" onClick={() => setSourcePdf(null)} className="text-kenya-green hover:underline">Don&apos;t keep it</button>
+        </p>
+      )}
       <form onSubmit={(e) => saveCommittee(e)} className="mb-4 space-y-3 rounded-lg border border-gray-200 bg-white p-4">
         {members.map((m, i) => (
           <div key={i} className="rounded-md border border-gray-100 bg-gray-50/60 p-3">
@@ -812,6 +834,7 @@ function SupervisoryBoardTab({ coop }) {
           Its duties are kept separate from the Management Committee.
         </p>
       </div>
+      <PdfListImport coop={coop} kind="BOARD" label="Import board from PDF" onImported={load} />
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
       <div className="grid gap-4 md:grid-cols-3">

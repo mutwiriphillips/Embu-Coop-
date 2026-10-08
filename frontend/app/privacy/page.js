@@ -128,6 +128,7 @@ export default function PrivacyPolicyPage() {
               retirement; gender composition (needed to verify the statutory 1/3 gender-rotation rule),
               election records, and AGM minutes. ID and phone numbers are visible only to authorised staff
               and are never written to audit logs.</li>
+            <li><b>Name-list PDFs:</b> a typed PDF of members or office-holders may be uploaded so the names can be read into the register after a person checks them; the PDF is kept as a supporting document</li>
             <li><b>Document data:</b> by-laws, audit reports, and other statutory filings uploaded by a
               Cooperative Manager or Field Officer</li>
             <li><b>Staff employment data:</b> job group, designation, phone, county/ward assignment, and
