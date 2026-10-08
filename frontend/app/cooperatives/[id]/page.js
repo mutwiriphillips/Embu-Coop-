@@ -450,6 +450,11 @@ function GovernanceTab({ coop, onChange }) {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const [complianceWarning, setComplianceWarning] = useState(null);
+  // Unknown until the server answers; treat as "not enforced" so nothing is shown that could be wrong.
+  const [enforced, setEnforced] = useState(false);
+  useEffect(() => {
+    api.get(`/cooperatives/${coop.id}/governance/rules`).then((r) => setEnforced(!!r.data.genderRuleEnforced)).catch(() => {});
+  }, [coop.id]);
 
   const committees = coop.committees || [];
   const current = committees.filter((c) => c.current);
@@ -491,14 +496,18 @@ function GovernanceTab({ coop, onChange }) {
     setSaved("");
     setComplianceWarning(null);
     try {
-      await api.post(`/cooperatives/${coop.id}/governance/committees`, {
+      const res = await api.post(`/cooperatives/${coop.id}/governance/committees`, {
         committeeType: "MANAGEMENT",
         termLengthYears: 3,
         members,
         ...(overrideJustification ? { overrideJustification } : {}),
       });
       setMembers([blankMember("CHAIRPERSON")]);
-      setSaved("Committee saved. It is now the committee in force; the previous one is kept below as history.");
+      const flagged = res.data?.genderRuleEnforced === false && res.data?.complianceCheck && !res.data.complianceCheck.compliant;
+      setSaved(
+        "Committee saved. It is now the committee in force; the previous one is kept below as history." +
+          (flagged ? " Note: it does not yet meet the 1/3 gender rule. This is recorded as Non-compliant but did not block saving." : "")
+      );
       onChange();
     } catch (err) {
       if (err?.response?.status === 422) {
@@ -569,6 +578,11 @@ function GovernanceTab({ coop, onChange }) {
             Save Committee
           </button>
         </div>
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          {enforced
+            ? "The 1/3 gender rule is enforced: no gender may hold more than two-thirds of the elected seats, or the committee is blocked (a Director can override with a justification)."
+            : "The 1/3 gender rule is not being enforced at registration for now. A committee that falls short is still saved and shown as Non-compliant, so the gap stays on record for when enforcement starts."}
+        </p>
         <p className="text-xs text-gray-400">
           The term (3 years) runs from the date elected. Someone whose retirement date has passed no longer counts toward the 1/3 gender rule.
         </p>
