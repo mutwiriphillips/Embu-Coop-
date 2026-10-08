@@ -92,9 +92,25 @@ As Director or National Admin:
 - [ ] Upload a document (any file) as Manager — appears with status `PENDING`
 - [ ] Review it as Director/Sub-County role — moves to `REVIEWED` or is rejected
 - [ ] Approve it as Director — moves to `APPROVED`
-- [ ] Governance tab: save a committee composition that **violates** the 1/3 rule (e.g., 4 men, 0 women in elected seats) — confirm it's **blocked** with an explicit error, not silently accepted
+- [ ] Governance tab (while `ENFORCE_GENDER_RULE=false`, the current setting): save a committee that **violates** the 1/3 rule (e.g., 4 men, 0 women) — confirm it **saves**, the form shows the "not being enforced" note, and the committee is labelled **Non-compliant**
+- [ ] (Only after setting `ENFORCE_GENDER_RULE=true`) the same committee is **blocked** with an explicit error
 - [ ] Save a compliant composition — confirm it succeeds
-- [ ] As Director, override a blocked composition with a justification — confirm the override is logged (visible on the committee, e.g., "Director override logged")
+- [ ] (Only when enforcement is on) as Director, override a blocked composition with a justification — confirm the override is logged ("Director override logged")
+- [ ] Committee member form: ID number, phone number (any of `0712 345 678` / `+254712345678`), date of appointment and date of retirement are captured; a bad phone or an ID with spaces is rejected with a clear message
+- [ ] Set a retirement date in the past on one member — they show as **Retired** and no longer count toward the 1/3 rule or term status
+- [ ] **Supervisory Board** tab: seats Chairman, Honorary Secretary and Member (3 in total); appoint one holder per seat with ID, phone, appointment and retirement dates; confirm the same ID cannot hold two seats at once and a filled seat cannot take a second serving holder
+- [ ] Documents tab: **Registration Certificate** is offered as a document type, uploads like the others (PDF/photo), and goes through PENDING → REVIEWED → APPROVED
+- [ ] New Cooperative form has a **Date of registration** calendar picker (required, future dates greyed out); the date shows in the Registry table and on the cooperative page, where staff can Add/Edit it for existing societies
+- [ ] As Director, Cooperative Registry shows **Reg. No.** and a **Delete** button; deleting a cooperative that has members/documents is refused with a clear message, an empty one is deleted
+
+### Staff positions ("Other") and reporting lines
+
+- [ ] As Director: Staff & Access → Role **Other** → the Designation box becomes a required **Position** and **Reports to** is required; create e.g. an Accountant reporting to yourself
+- [ ] Reports-to only lists active, more senior people in the same county; trying a Field Officer under an Accountant, or a loop, is refused with a clear message
+- [ ] The new account signs in and sees only **Cooperatives**, view-only; Staff & Access → **Access** can widen/narrow it; **Activity** shows last sign-in and recent actions
+- [ ] Deactivating someone who still has people reporting to them is refused until those people are moved; **Reactivate** brings an account back
+- [ ] A Sub-County Officer does not see "Other" accounts in the staff list
+- [ ] Committee form has one **Date appointed** field (no separate election date); the table still shows an **Elected** column
 
 ## Phase 7 — Field Operations (5 minutes)
 

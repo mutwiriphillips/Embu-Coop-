@@ -137,8 +137,29 @@ real Postgres database and real HTTP round-trips until this checklist does.
 - `Term Expired — Action Required` flag: day after `reelection_due_date` with no new election
 - **1/3 gender rotation rule:** no single gender may hold more than 2/3 of elected
   committee seats (Chairperson, Vice Chairperson, Secretary, Treasurer, 4 board
-  members). Non-elected Executive Manager is excluded. Violations block submission
-  unless the Director overrides with a logged justification.
+  members). Non-elected Executive Manager is excluded. Enforcement is currently
+  **suspended** (`ENFORCE_GENDER_RULE=false`): a committee that fails the rule is saved and shown as
+  Non-compliant but not blocked. Setting `ENFORCE_GENDER_RULE=true` restores blocking, where a
+  violation blocks submission unless the Director overrides with a logged justification. Retired members
+  (retirement date reached) are excluded from the rule and from term status.
+- **Committee member records** carry national ID, phone (stored as `+254XXXXXXXXX`),
+  date of appointment and date of retirement. ID and phone are never written to audit logs.
+- **Supervisory Board** (Co-operative Societies Rules 2004, rule 28): three seats —
+  Chairman, Honorary Secretary, Member — 3-year term. Seat history is kept; a seat can
+  have only one serving holder and one person cannot serve two seats. Overlap with the
+  management committee is flagged as a warning (rule 28(4)), not blocked.
+- Each committee save adds a new committee; only the newest of each type is "current"
+  and scored. Cooperative Registry: Director/National Admin can delete a cooperative only
+  when it has no members, documents or other records.
+- **Staff positions.** Besides the five fixed roles, a Director or National Admin can create an
+  **Other** account for any position (accountant, clerk, store keeper...). The position title and a
+  reporting line are required; a person must report to someone more senior in the same county
+  (no loops, no inactive line managers). Only Directors and the National Admin can list, open, edit,
+  grant access to, view the activity of, deactivate or reactivate these accounts. They start view-only.
+  Roles are fixed at creation and a Director can no longer edit Director/National Admin accounts or move staff between counties.
+- Committee members have a single **Date appointed**; the election date is kept on the record
+  (defaulting to it) and starts the 3-year term.
+- **Registration Certificate** is a document type uploaded and reviewed like any other.
 
 ## Member Self-Service Portal (Module 7)
 

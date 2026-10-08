@@ -16,6 +16,8 @@ export default function DashboardPage() {
   // The county dashboard isn't for Cooperative Managers; send them home.
   useEffect(() => {
     if (user?.role === "COOPERATIVE_MANAGER") router.replace(cooperativeHome(user));
+    // "Other" positions have no county dashboard; their workspace is the registry.
+    if (user?.role === "OTHER_STAFF") router.replace("/cooperatives");
   }, [user, router]);
   const isNationalAdmin = user?.role === "NATIONAL_ADMIN";
 

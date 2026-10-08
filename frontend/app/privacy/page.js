@@ -108,7 +108,7 @@ export default function PrivacyPolicyPage() {
           <ul className="list-disc space-y-1 pl-5">
             <li>Cooperative members registered on the Platform&apos;s Member Portal</li>
             <li>Cooperative Managers</li>
-            <li>County staff — Field Officers, Sub-County Officers, County Directors, and National Admin accounts</li>
+            <li>County staff — Field Officers, Sub-County Officers, County Directors, National Admin accounts, and other positions (such as accountants or clerks) created by a Director or the National Admin</li>
             <li>Cooperative societies themselves, as institutional record-holders (registration and governance data)</li>
           </ul>
         </Section>

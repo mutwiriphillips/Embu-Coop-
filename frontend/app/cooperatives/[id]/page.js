@@ -440,7 +440,7 @@ function StatusBadge({ status }) {
 const MGMT_ROLES = ["CHAIRPERSON", "VICE_CHAIRPERSON", "SECRETARY", "TREASURER", "BOARD_MEMBER", "EXECUTIVE_MANAGER"];
 const OVERRIDE_ROLES = ["NATIONAL_ADMIN", "DIRECTOR"];
 const blankMember = (role = "BOARD_MEMBER") => ({
-  fullName: "", gender: "MALE", role, nationalId: "", phoneNumber: "", electionDate: "", appointmentDate: "", retirementDate: "",
+  fullName: "", gender: "MALE", role, nationalId: "", phoneNumber: "", appointmentDate: "", retirementDate: "",
 });
 
 function GovernanceTab({ coop, onChange }) {
@@ -464,11 +464,7 @@ function GovernanceTab({ coop, onChange }) {
     setMembers((prev) =>
       prev.map((m, i) => {
         if (i !== idx) return m;
-        const next = { ...m, [field]: value };
-        // The appointment date is usually the day of the election; offer it
-        // rather than make the user type the same date twice.
-        if (field === "electionDate" && !m.appointmentDate) next.appointmentDate = value;
-        return next;
+        return { ...m, [field]: value };
       })
     );
   }
@@ -483,7 +479,7 @@ function GovernanceTab({ coop, onChange }) {
     setMembers(
       live.map((m) => ({
         fullName: m.fullName, gender: m.gender, role: m.role, nationalId: m.nationalId || "", phoneNumber: m.phoneNumber || "",
-        electionDate: toInputDate(m.electionDate), appointmentDate: toInputDate(m.appointmentDate || m.electionDate), retirementDate: toInputDate(m.retirementDate),
+        appointmentDate: toInputDate(m.appointmentDate || m.electionDate), retirementDate: toInputDate(m.retirementDate),
       }))
     );
     setSaved("");
@@ -558,11 +554,8 @@ function GovernanceTab({ coop, onChange }) {
               <Field label="Phone number">
                 <input required type="tel" placeholder="0712 345 678" className={inputCls} value={m.phoneNumber} onChange={(e) => updateMember(i, "phoneNumber", e.target.value)} />
               </Field>
-              <Field label="Date elected">
-                <input required type="date" className={inputCls} value={m.electionDate} onChange={(e) => updateMember(i, "electionDate", e.target.value)} />
-              </Field>
-              <Field label="Date of appointment">
-                <input required type="date" className={inputCls} value={m.appointmentDate} onChange={(e) => updateMember(i, "appointmentDate", e.target.value)} />
+              <Field label="Date appointed" hint="Also recorded as the election date">
+                <input required type="date" max={todayInput()} className={inputCls} value={m.appointmentDate} onChange={(e) => updateMember(i, "appointmentDate", e.target.value)} />
               </Field>
               <Field label="Retirement date" hint="Leave blank while serving">
                 <input type="date" min={m.appointmentDate || undefined} className={inputCls} value={m.retirementDate} onChange={(e) => updateMember(i, "retirementDate", e.target.value)} />
@@ -641,7 +634,8 @@ function CommitteeCard({ coop, committee: c, onChange, history }) {
               <th className="py-1 pr-3">Role</th>
               <th className="py-1 pr-3">ID number</th>
               <th className="py-1 pr-3">Phone</th>
-              <th className="py-1 pr-3">Appointed</th>
+              <th className="py-1 pr-3">Date appointed</th>
+              <th className="py-1 pr-3">Elected</th>
               <th className="py-1 pr-3">Re-election due</th>
               <th className="py-1 pr-3">Retirement</th>
               <th className="py-1" />
@@ -709,6 +703,7 @@ function CommitteeMemberRow({ coop, committee, m, onChange }) {
         <td className="py-1.5 pr-3">{m.nationalId || missing}</td>
         <td className="py-1.5 pr-3 whitespace-nowrap">{m.phoneNumber || missing}</td>
         <td className="py-1.5 pr-3 whitespace-nowrap">{m.appointmentDate ? fmtDate(m.appointmentDate) : missing}</td>
+        <td className="py-1.5 pr-3 whitespace-nowrap text-gray-500">{fmtDate(m.electionDate)}</td>
         <td className="py-1.5 pr-3 whitespace-nowrap">{fmtDate(m.reelectionDueDate)}</td>
         <td className="py-1.5 pr-3 whitespace-nowrap">{m.retirementDate ? fmtDate(m.retirementDate) : "Serving"}</td>
         <td className="py-1.5 text-right">
@@ -717,12 +712,12 @@ function CommitteeMemberRow({ coop, committee, m, onChange }) {
       </tr>
       {editing && (
         <tr className="bg-gray-50/70">
-          <td colSpan={8} className="p-3">
+          <td colSpan={9} className="p-3">
             <form onSubmit={save} className="grid grid-cols-2 gap-2 md:grid-cols-5">
               <Field label="Full name"><input className={inputCls} value={f.fullName} onChange={(e) => setF({ ...f, fullName: e.target.value })} /></Field>
               <Field label="ID number"><input className={inputCls} value={f.nationalId} onChange={(e) => setF({ ...f, nationalId: e.target.value })} /></Field>
               <Field label="Phone number"><input type="tel" className={inputCls} value={f.phoneNumber} onChange={(e) => setF({ ...f, phoneNumber: e.target.value })} /></Field>
-              <Field label="Date of appointment"><input type="date" className={inputCls} value={f.appointmentDate} onChange={(e) => setF({ ...f, appointmentDate: e.target.value })} /></Field>
+              <Field label="Date appointed"><input type="date" max={todayInput()} className={inputCls} value={f.appointmentDate} onChange={(e) => setF({ ...f, appointmentDate: e.target.value })} /></Field>
               <Field label="Retirement date" hint="Blank = still serving"><input type="date" min={f.appointmentDate || undefined} className={inputCls} value={f.retirementDate} onChange={(e) => setF({ ...f, retirementDate: e.target.value })} /></Field>
               <div className="col-span-2 flex items-center gap-2 md:col-span-5">
                 <button type="submit" disabled={busy} className="rounded-md bg-kenya-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : "Save"}</button>

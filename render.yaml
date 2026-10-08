@@ -38,6 +38,10 @@ services:
       # TEST-RUN ONLY. Set back to "false" (or remove) once the pilot ends.
       - key: ALLOW_OPEN_SIGNUP
         value: "true"
+      # 1/3 gender rule: "false" = measured and flagged but not blocked.
+      # Change to "true" (and redeploy) when enforcement starts.
+      - key: ENFORCE_GENDER_RULE
+        value: "false"
 
   - type: web
     name: embu-coop-frontend

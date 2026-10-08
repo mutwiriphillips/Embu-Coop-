@@ -317,3 +317,23 @@ is not an access-control model for production.
   itself.
 - **No password reset / email verification** — expected for a pilot; needed
   before production.
+
+
+## Schema note: governance fields, Supervisory Board, Registration Certificate
+
+The build's `prisma db push` applies these additive changes automatically: nullable
+`nationalId`, `phoneNumber`, `appointmentDate`, `retirementDate` on `CommitteeMember`;
+new `SupervisoryBoardMember` table and `SupervisoryPosition` enum; new
+`REGISTRATION_CERTIFICATE` value on `DocumentType`. No existing rows are modified.
+Existing committee members simply show blank ID/phone/dates until edited in the app.
+
+## Switching the 1/3 gender rule on later
+
+The rule is **not enforced** while `ENFORCE_GENDER_RULE` is `false` (the default). Committees are
+still scored and labelled Non-compliant; they just are not blocked. To start enforcing: in the
+Render dashboard open the backend service > Environment, set `ENFORCE_GENDER_RULE` to `true`, and
+save (the service restarts). Committees already saved are not changed; the next submission is checked.
+
+## Schema note: "Other" staff role
+
+Adds one value, `OTHER_STAFF`, to the `StaffRole` enum. Additive: no existing account changes.
