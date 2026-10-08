@@ -5,6 +5,7 @@ const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
 const { resolveLocation, areaScope, httpError } = require("../utils/geography");
 const { toPublicUser } = require("./authController");
+const { assertValidSupervisor } = require("../utils/hierarchy");
 
 // HTML forms send "" for every blank field. z.string().uuid().optional()
 // rejects "" (it's neither absent nor a valid id), which made EVERY staff
@@ -16,7 +17,7 @@ const createStaffSchema = z.object({
   fullName: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
-  role: z.enum(["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER", "FIELD_OFFICER", "COOPERATIVE_MANAGER"]),
+  role: z.enum(["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER", "FIELD_OFFICER", "COOPERATIVE_MANAGER", "OTHER_STAFF"]),
   countyId: blankToUndefined(z.string().uuid().optional()),
   cooperativeId: blankToUndefined(z.string().uuid().optional()),
   jobGroup: blankToUndefined(z.string().optional()),
@@ -29,10 +30,19 @@ const createStaffSchema = z.object({
   reportsToId: blankToUndefined(z.string().uuid().optional()),
 });
 
-const updateStaffSchema = createStaffSchema.partial().omit({ password: true });
+// A role is fixed when the account is created (it decides which login the
+// person uses and what they can reach), so it is not editable here.
+// reportsToId may be null to clear the reporting line.
+const updateStaffSchema = createStaffSchema
+  .partial()
+  .omit({ password: true, role: true })
+  .extend({ reportsToId: z.preprocess((v) => (v === "" ? null : v), z.string().uuid().nullable().optional()) });
+
+const PERMISSION_MODULES = ["cooperatives", "documents", "governance"];
+const SENIOR_ROLES = ["NATIONAL_ADMIN", "DIRECTOR"];
 
 const permissionSchema = z.object({
-  module: z.string().min(1),
+  module: z.enum(PERMISSION_MODULES, { errorMap: () => ({ message: `Module must be one of: ${PERMISSION_MODULES.join(", ")}` }) }),
   canView: z.boolean().optional(),
   canEdit: z.boolean().optional(),
   canApprove: z.boolean().optional(),
@@ -49,6 +59,9 @@ async function listStaff(req, res) {
   }
   const staff = await prisma.user.findMany({
     where: {
+      // Accounts for other positions are managed only by the Director and
+      // the National Admin, so they are not listed for anyone else.
+      ...(["NATIONAL_ADMIN", "DIRECTOR"].includes(req.user.role) ? {} : { role: { not: "OTHER_STAFF" } }),
       ...(countyId ? { countyId } : {}),
       ...(scope.subCountyId ? { subCountyId: scope.subCountyId } : subCountyId ? { subCountyId } : {}),
       ...(wardId ? { wardId } : {}),
@@ -69,6 +82,9 @@ async function getStaff(req, res) {
     where: { id: req.params.id },
     include: { permissions: true },
   });
+  if (user.role === "OTHER_STAFF" && !SENIOR_ROLES.includes(req.user.role)) {
+    throw httpError(403, "Only a Director or the National Admin can view this account");
+  }
   res.json(toPublicUser(user));
 }
 
@@ -91,6 +107,16 @@ async function createStaff(req, res) {
   // own county that doesn't already have a manager. Without this link they
   // could log in but every cooperative page returned "You do not manage this
   // cooperative".
+  // "Other" positions: the position title and the reporting line are what
+  // place the person in the hierarchy, so both are required.
+  if (data.role === "OTHER_STAFF") {
+    if (!data.designation) throw httpError(400, "Enter this person's position, e.g. Accountant or Store Keeper");
+    if (!data.reportsToId) throw httpError(400, "Choose who this person reports to");
+  }
+  if (data.reportsToId) {
+    await assertValidSupervisor(prisma, data.reportsToId, { role: data.role, countyId });
+  }
+
   let cooperative = null;
   if (data.role === "COOPERATIVE_MANAGER") {
     if (!data.cooperativeId) {
@@ -147,7 +173,7 @@ async function createStaff(req, res) {
     action: "CREATE_STAFF",
     entityType: "User",
     entityId: user.id,
-    metadata: { role: data.role, cooperativeId: cooperative?.id },
+    metadata: { role: data.role, cooperativeId: cooperative?.id, reportsToId: data.reportsToId },
   });
 
   res.status(201).json(toPublicUser(user));
@@ -155,13 +181,34 @@ async function createStaff(req, res) {
 
 async function updateStaff(req, res) {
   const { cooperativeId, ...data } = updateStaffSchema.parse(req.body);
+  const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
+
+  // Closed hole: this used to let a Director rewrite any account in the
+  // county (including their own) because the role and county were editable.
+  if (req.user.role === "DIRECTOR") {
+    if (SENIOR_ROLES.includes(target.role)) {
+      const selfOnly = target.id === req.user.id && Object.keys(data).every((k) => ["fullName", "designation", "phoneNumber", "jobGroup"].includes(k)) && !cooperativeId;
+      if (!selfOnly) throw httpError(403, "Only a National Admin can change Director or National Admin accounts");
+    }
+    if (data.countyId !== undefined && data.countyId !== target.countyId) {
+      throw httpError(403, "Only a National Admin can move staff to another county");
+    }
+  }
+  if (target.role === "OTHER_STAFF" && data.designation !== undefined && !data.designation) {
+    throw httpError(400, "An 'Other' account must keep a position title");
+  }
+  if (data.reportsToId === null && target.role === "OTHER_STAFF") {
+    throw httpError(400, "An 'Other' account must report to someone");
+  }
+  if (data.reportsToId) {
+    await assertValidSupervisor(prisma, data.reportsToId, { id: target.id, role: target.role, countyId: data.countyId || target.countyId });
+  }
 
   // cooperativeId isn't a User column, so it's handled separately: it
   // (re)assigns an existing Cooperative Manager to a cooperative. This is how
   // a Director fixes a manager account that was created before managers were
   // linked automatically.
   if (cooperativeId) {
-    const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
     if (target.role !== "COOPERATIVE_MANAGER") {
       return res.status(400).json({ error: "Only a Cooperative Manager can be assigned to a cooperative" });
     }
@@ -177,7 +224,6 @@ async function updateStaff(req, res) {
   }
 
   if (["subCountyId", "wardId", "subCounty", "ward"].some((k) => data[k] !== undefined)) {
-    const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
     const { subCountyId, wardId, subCounty, ward, ...restData } = data;
     const location = await resolveLocation({ countyId: data.countyId || target.countyId, subCountyId, wardId, subCounty, ward });
     Object.keys(data).forEach((k) => delete data[k]);
@@ -200,6 +246,17 @@ async function updateStaff(req, res) {
 }
 
 async function deactivateStaff(req, res) {
+  const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
+  if (target.id === req.user.id) throw httpError(400, "You can't deactivate your own account");
+  if (req.user.role === "DIRECTOR" && SENIOR_ROLES.includes(target.role)) {
+    throw httpError(403, "Only a National Admin can deactivate Director or National Admin accounts");
+  }
+  // Deactivating someone who still has people reporting to them would leave
+  // those people with no line manager and break the hierarchy.
+  const reports = await prisma.user.findMany({ where: { reportsToId: target.id, active: true }, select: { fullName: true } });
+  if (reports.length) {
+    throw httpError(409, `${target.fullName} still has ${reports.length} active ${reports.length === 1 ? "person" : "people"} reporting to them (${reports.map((r) => r.fullName).join(", ")}). Move them to another line manager first.`);
+  }
   const user = await prisma.user.update({
     where: { id: req.params.id },
     data: { active: false },
@@ -215,8 +272,48 @@ async function deactivateStaff(req, res) {
   res.json(toPublicUser(user));
 }
 
+async function reactivateStaff(req, res) {
+  const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
+  if (req.user.role === "DIRECTOR" && SENIOR_ROLES.includes(target.role)) {
+    throw httpError(403, "Only a National Admin can reactivate Director or National Admin accounts");
+  }
+  if (target.reportsToId) {
+    const boss = await prisma.user.findUnique({ where: { id: target.reportsToId } });
+    if (!boss || !boss.active) {
+      throw httpError(409, `${target.fullName}'s line manager is deactivated. Choose a new line manager first, then reactivate.`);
+    }
+  }
+  const user = await prisma.user.update({ where: { id: target.id }, data: { active: true } });
+  await recordAudit({ userId: req.user.id, action: "REACTIVATE_STAFF", entityType: "User", entityId: user.id });
+  res.json(toPublicUser(user));
+}
+
+// What this person has done in the system: their last sign-in and recent
+// actions. Reads the audit log; values such as IDs and phone numbers are never
+// stored there, and the details of each action are not returned.
+async function staffActivity(req, res) {
+  const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
+  const rows = await prisma.auditLog.findMany({
+    where: { userId: target.id },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    select: { id: true, action: true, entityType: true, createdAt: true },
+  });
+  const lastLogin = rows.find((r) => r.action === "LOGIN");
+  res.json({
+    staffId: target.id,
+    fullName: target.fullName,
+    lastLoginAt: lastLogin ? lastLogin.createdAt : null,
+    recent: rows.slice(0, 50),
+  });
+}
+
 async function setPermission(req, res) {
   const data = permissionSchema.parse(req.body);
+  const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
+  if (SENIOR_ROLES.includes(target.role)) {
+    throw httpError(400, "Directors and National Admins always have full access; there is nothing to set.");
+  }
   const permission = await prisma.permission.upsert({
     where: { userId_module: { userId: req.params.id, module: data.module } },
     update: data,
@@ -240,5 +337,7 @@ module.exports = {
   createStaff,
   updateStaff,
   deactivateStaff,
+  reactivateStaff,
+  staffActivity,
   setPermission,
 };

@@ -37,6 +37,7 @@ enum StaffRole {
   SUBCOUNTY_OFFICER
   FIELD_OFFICER
   COOPERATIVE_MANAGER
+  OTHER_STAFF          // any other position (accountant, clerk, ...): title + reporting line set by Director/National Admin
 }
 
 model User {

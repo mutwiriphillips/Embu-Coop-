@@ -6,6 +6,8 @@ const {
   createStaff,
   updateStaff,
   deactivateStaff,
+  reactivateStaff,
+  staffActivity,
   setPermission,
 } = require("../controllers/staffController");
 
@@ -21,6 +23,8 @@ router.get("/:id", requireRole("NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"
 router.post("/", requireRole("NATIONAL_ADMIN", "DIRECTOR"), createStaff);
 router.patch("/:id", requireRole("NATIONAL_ADMIN", "DIRECTOR"), requireStaffAccess(), updateStaff);
 router.delete("/:id", requireRole("NATIONAL_ADMIN", "DIRECTOR"), requireStaffAccess(), deactivateStaff);
+router.post("/:id/reactivate", requireRole("NATIONAL_ADMIN", "DIRECTOR"), requireStaffAccess(), reactivateStaff);
+router.get("/:id/activity", requireRole("NATIONAL_ADMIN", "DIRECTOR"), requireStaffAccess(), staffActivity);
 router.put("/:id/permissions", requireRole("NATIONAL_ADMIN", "DIRECTOR"), requireStaffAccess(), setPermission);
 
 module.exports = router;

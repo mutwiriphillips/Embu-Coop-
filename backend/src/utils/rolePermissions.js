@@ -34,6 +34,13 @@ const DEFAULT_PERMISSIONS = {
     { module: "documents", canView: true, canEdit: true },
     { module: "governance", canView: true, canEdit: true },
   ],
+  // Any other position: view-only to start. A Director or National Admin
+  // widens (or removes) this per person on the Staff & Access page.
+  OTHER_STAFF: [
+    { module: "cooperatives", canView: true, canEdit: false },
+    { module: "documents", canView: true, canEdit: false },
+    { module: "governance", canView: true, canEdit: false },
+  ],
   // Bypass requirePermission entirely; rows would be ignored.
   DIRECTOR: [],
   NATIONAL_ADMIN: [],

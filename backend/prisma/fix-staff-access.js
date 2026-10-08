@@ -21,7 +21,7 @@ const { PrismaClient } = require("@prisma/client");
 const { defaultPermissionsForRole } = require("../src/utils/rolePermissions");
 
 const prisma = new PrismaClient();
-const ROLES_NEEDING_ROWS = ["SUBCOUNTY_OFFICER", "FIELD_OFFICER", "COOPERATIVE_MANAGER"];
+const ROLES_NEEDING_ROWS = ["SUBCOUNTY_OFFICER", "FIELD_OFFICER", "COOPERATIVE_MANAGER", "OTHER_STAFF"];
 
 async function main() {
   const users = await prisma.user.findMany({

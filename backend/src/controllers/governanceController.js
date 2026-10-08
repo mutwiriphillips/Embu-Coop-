@@ -34,11 +34,15 @@ const committeeMemberSchema = z
     role: roleSchema,
     nationalId: nationalIdSchema,
     phoneNumber: phoneSchema,
-    electionDate: requiredDate("Election date"),
-    appointmentDate: requiredDate("Date of appointment"),
+    // The form asks for one date, "Date appointed". The election date is still
+    // kept on every record (it starts the 3-year term), and defaults to the
+    // date appointed unless the caller sends a different one.
+    electionDate: optionalDate("Election date"),
+    appointmentDate: requiredDate("Date appointed"),
     retirementDate: optionalDate("Retirement date"),
   })
-  .refine(retiresAfterAppointment, RETIRE_MSG);
+  .refine(retiresAfterAppointment, RETIRE_MSG)
+  .transform((m) => ({ ...m, electionDate: m.electionDate ?? m.appointmentDate }));
 
 const committeeSchema = z.object({
   committeeType: z
@@ -249,6 +253,15 @@ async function updateCommitteeMember(req, res) {
   }
   assertNoDuplicateServing(committee.members.map((m) => (m.id === member.id ? merged : m)));
 
+  // The election date normally equals the date appointed (that is how the
+  // form records it). If the appointed date is corrected and the two were the
+  // same day, the election date and the re-election due date move with it;
+  // a deliberately different election date is left alone.
+  const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
+  if (changes.appointmentDate && member.electionDate && day(member.electionDate) === day(member.appointmentDate)) {
+    changes.electionDate = changes.appointmentDate;
+    changes.reelectionDueDate = computeReelectionDueDate(changes.appointmentDate, committee.termLengthYears);
+  }
   const updated = await prisma.committeeMember.update({ where: { id: member.id }, data: changes });
   // Audit the fields touched, never the ID or phone values themselves.
   await recordAudit({
