@@ -1,6 +1,8 @@
 const express = require("express");
 const { authenticate, requireRole, requirePermission, requireCooperativeAccess } = require("../middleware/auth");
 const ctrl = require("../controllers/cooperativeController");
+const importCtrl = require("../controllers/importController");
+const { upload } = require("../utils/fileStorage");
 
 const router = express.Router();
 router.use(authenticate);
@@ -26,6 +28,10 @@ router.delete("/:id", requireRole("NATIONAL_ADMIN", "DIRECTOR"), requireCooperat
 // numbers, so this is exactly the kind of data requireCooperativeAccess
 // exists to protect.
 router.get("/:id/members", requireCooperativeAccess(), requirePermission("cooperatives", "canView"), ctrl.listMembers);
+// Typed-PDF name lists: read a PDF into a proposed list (saves nothing), then
+// add a reviewed list of members in one go.
+router.post("/:id/imports/parse", requireCooperativeAccess(), upload.single("file"), importCtrl.parseList);
+router.post("/:id/members/bulk", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.addMembersBulk);
 router.post("/:id/members", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.addMember);
 router.patch("/:id/members/:memberId", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.updateMember);
 router.delete("/:id/members/:memberId", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.removeMember);

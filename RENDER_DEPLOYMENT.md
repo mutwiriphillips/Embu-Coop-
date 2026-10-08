@@ -337,3 +337,8 @@ save (the service restarts). Committees already saved are not changed; the next 
 ## Schema note: "Other" staff role
 
 Adds one value, `OTHER_STAFF`, to the `StaffRole` enum. Additive: no existing account changes.
+
+## PDF name-list import
+
+Adds the `pdfjs-dist` dependency (pure JavaScript; installed by the normal `npm install` in the build).
+No schema change and no new environment variable. A canvas warning from the library is silenced at load time.

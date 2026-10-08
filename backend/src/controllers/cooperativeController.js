@@ -4,7 +4,7 @@ const { recordAudit } = require("../utils/audit");
 const { resolveLocation, areaScope, httpError, norm } = require("../utils/geography");
 const { assertBelongs } = require("../utils/ownership");
 const { withLiveStatus } = require("../utils/governance");
-const { optionalDate } = require("../utils/validators");
+const { optionalDate, phoneSchema, nationalIdSchema } = require("../utils/validators");
 
 // Two societies can't share a name in one county (the Registrar doesn't allow
 // it), and two entries with the same name are almost always an accidental
@@ -262,6 +262,71 @@ async function addMember(req, res) {
   res.status(201).json(member);
 }
 
+// POST /cooperatives/:id/members/bulk
+// Adds a reviewed list of members in one go (used by the PDF import). All or
+// nothing: if any row is wrong, or already a member, NOTHING is saved and the
+// response lists each problem by row so they can be fixed and resubmitted.
+const bulkRowSchema = z.object({
+  legalName: z.string().trim().min(2, "Enter the member's full name"),
+  nationalId: nationalIdSchema,
+  phoneNumber: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), phoneSchema.optional()),
+  gender: z.enum(["MALE", "FEMALE"], { errorMap: () => ({ message: "Choose Male or Female" }) }),
+});
+const MAX_BULK = 2000;
+
+async function addMembersBulk(req, res) {
+  const input = req.body && req.body.members;
+  if (!Array.isArray(input) || input.length === 0) throw httpError(400, "Send at least one member");
+  if (input.length > MAX_BULK) throw httpError(400, `Add at most ${MAX_BULK} members at a time`);
+
+  const rowErrors = [];
+  const clean = [];
+  const seen = new Map();
+  input.forEach((raw, i) => {
+    const parsed = bulkRowSchema.safeParse(raw);
+    if (!parsed.success) {
+      rowErrors.push({ row: i + 1, name: raw && raw.legalName, errors: parsed.error.issues.map((x) => x.message) });
+      return;
+    }
+    const row = parsed.data;
+    if (seen.has(row.nationalId)) {
+      rowErrors.push({ row: i + 1, name: row.legalName, errors: [`ID ${row.nationalId} is also on row ${seen.get(row.nationalId)}`] });
+      return;
+    }
+    seen.set(row.nationalId, i + 1);
+    clean.push({ row: i + 1, ...row });
+  });
+
+  const existing = await prisma.member.findMany({ where: { cooperativeId: req.params.id }, select: { nationalId: true } });
+  const have = new Set(existing.map((m) => String(m.nationalId).toUpperCase()));
+  for (const r of clean) {
+    if (have.has(r.nationalId)) rowErrors.push({ row: r.row, name: r.legalName, errors: [`ID ${r.nationalId} is already a member of this cooperative`] });
+  }
+
+  if (rowErrors.length) {
+    rowErrors.sort((a, b) => a.row - b.row);
+    return res.status(422).json({
+      error: `${rowErrors.length} ${rowErrors.length === 1 ? "row needs" : "rows need"} fixing. Nothing was added.`,
+      rowErrors,
+    });
+  }
+
+  await prisma.member.createMany({
+    data: clean.map(({ row, ...m }) => ({ ...m, cooperativeId: req.params.id, shareCapital: 0 })),
+  });
+
+  // Counts only: names, IDs and phones never go into the audit log.
+  await recordAudit({
+    userId: req.user.id,
+    action: "BULK_ADD_MEMBERS",
+    entityType: "Cooperative",
+    entityId: req.params.id,
+    metadata: { count: clean.length },
+  });
+
+  res.status(201).json({ created: clean.length });
+}
+
 async function updateMember(req, res) {
   const data = memberSchema.partial().parse(req.body);
   assertBelongs(await prisma.member.findUnique({ where: { id: req.params.memberId } }), req.params.id, "Member");
@@ -296,6 +361,7 @@ async function removeMember(req, res) {
 }
 
 module.exports = {
+  addMembersBulk,
   VALUE_CHAINS,
   listCooperatives,
   getCooperative,

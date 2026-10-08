@@ -112,6 +112,15 @@ As Director or National Admin:
 - [ ] A Sub-County Officer does not see "Other" accounts in the staff list
 - [ ] Committee form has one **Date appointed** field (no separate election date); the table still shows an **Elected** column
 
+### Import names from a typed PDF
+
+- [ ] Members tab → **Import from PDF**: upload a typed member register (exported from Word/Excel). A table of names, IDs, phones and genders appears; nothing is saved yet
+- [ ] Correct a misread name/ID in the table; rows already on the register or repeated in the file are unticked and flagged; missing items are red and block the button until filled or unticked
+- [ ] **Add N members** → the members appear, and the PDF is listed under Documents as "Member register (typed PDF import, …)"
+- [ ] Governance → **Import committee from PDF**: fill any red cells → **Use … in the committee form** → check the form → **Save Committee** (the PDF is filed after it saves)
+- [ ] Supervisory Board → **Import board from PDF** → **Appoint 3**
+- [ ] A scanned/photographed PDF gives the "no typed text" message instead of guesses; a non-PDF or damaged file is refused
+
 ## Phase 7 — Field Operations (5 minutes)
 
 - [ ] Apply for leave as Field Officer

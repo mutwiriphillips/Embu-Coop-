@@ -159,6 +159,14 @@ real Postgres database and real HTTP round-trips until this checklist does.
   Roles are fixed at creation and a Director can no longer edit Director/National Admin accounts or move staff between counties.
 - Committee members have a single **Date appointed**; the election date is kept on the record
   (defaulting to it) and starts the 3-year term.
+- **Import names from a typed PDF** (members, management committee, Supervisory Board). The PDF's text
+  layer is read (`pdfjs-dist`), each line is searched for phone, ID, date, gender and position, and the
+  rest is taken as the name. The result is only a *proposal*: it opens in an editable review table,
+  flags anything uncertain, and nothing is saved until it is confirmed. Members are added in one
+  all-or-nothing call (`POST /cooperatives/:id/members/bulk`); committee rows go through the normal
+  committee form and board rows through the normal seat endpoint, so every existing rule still applies.
+  The original PDF is then filed under Documents as a supporting file. Scanned pages and photos have no
+  text layer and are not read (no OCR); the user is told so. Audit logs record counts only.
 - **Registration Certificate** is a document type uploaded and reviewed like any other.
 
 ## Member Self-Service Portal (Module 7)

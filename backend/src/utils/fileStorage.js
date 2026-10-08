@@ -28,6 +28,7 @@ function sniff(buf) {
 // What each kind of upload accepts. Documents may be a PDF or a clear photo of
 // the paper (common where scanners aren't available); photos must be images.
 const RULES = {
+  NAME_LIST_PDF:      { kinds: ["pdf"], maxBytes: 10 * 1024 * 1024, label: "a typed PDF (not a photo)" },
   DOCUMENT:           { kinds: ["pdf", "image"], maxBytes: 10 * 1024 * 1024, label: "a PDF or a photo (JPG, PNG, WEBP)" },
   AGM_NOTICE:         { kinds: ["pdf", "image"], maxBytes: 10 * 1024 * 1024, label: "a PDF or a photo (JPG, PNG, WEBP)" },
   AGM_MINUTES:        { kinds: ["pdf", "image"], maxBytes: 10 * 1024 * 1024, label: "a PDF or a photo (JPG, PNG, WEBP)" },
