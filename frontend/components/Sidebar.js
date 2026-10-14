@@ -59,9 +59,12 @@ export default function Sidebar() {
       <div className="border-t border-gray-200 p-4">
         <p className="text-sm font-medium">{user?.fullName}</p>
         <p className="mb-2 text-xs text-gray-500">{user?.role?.replace(/_/g, " ")}</p>
-        <button onClick={logout} className="text-xs font-medium text-kenya-red hover:underline">
-          Sign out
-        </button>
+        <div className="flex gap-4">
+          <Link href="/account/password" className="text-xs font-medium text-kenya-green hover:underline">Change password</Link>
+          <button onClick={logout} className="text-xs font-medium text-kenya-red hover:underline">
+            Sign out
+          </button>
+        </div>
       </div>
     </aside>
   );

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import api from "../../lib/api";
 import { cooperativeHome } from "../../lib/portal";
 import CountyDrillDown from "../../components/CountyDrillDown";
+import BackupCard from "../../components/BackupCard";
 
 const CHAINS_SHOWN = ["COFFEE", "TEA", "DAIRY", "SUGARCANE", "SACCO", "FISHERIES"];
 
@@ -159,6 +160,8 @@ export default function DashboardPage() {
           user={user}
         />
       )}
+
+      {isNationalAdmin && <BackupCard />}
     </ProtectedRoute>
   );
 }

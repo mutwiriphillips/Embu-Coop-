@@ -134,6 +134,18 @@ export default function StaffPage() {
     }
   }
 
+  async function resetPassword(s) {
+    const pw = window.prompt(`Set a temporary password for ${s.fullName} (10+ characters, letters and numbers).\n\nThey will have to choose their own at next sign-in, and any device they are signed in on will be signed out.`);
+    if (!pw) return;
+    setError(""); setNotice("");
+    try {
+      const { data } = await api.post(`/staff/${s.id}/reset-password`, { password: pw });
+      setNotice(data.message || "Password reset.");
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to reset the password");
+    }
+  }
+
   async function reactivate(s) {
     setError(""); setNotice("");
     try {
@@ -170,7 +182,7 @@ export default function StaffPage() {
             value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
           <input required type="email" placeholder="Email" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <input required type="password" placeholder="Temporary password" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          <input required type="password" placeholder="Temporary password (10+ characters, letters and numbers)" className="rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           <select className="rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value, cooperativeId: "", reportsToId: "" })}>
@@ -314,6 +326,9 @@ export default function StaffPage() {
                       <button onClick={() => togglePanel(s.id, "activity")} className="text-xs font-medium text-kenya-green hover:underline">Activity</button>
                       {!["NATIONAL_ADMIN", "DIRECTOR"].includes(s.role) && (
                         <button onClick={() => togglePanel(s.id, "access")} className="text-xs font-medium text-kenya-green hover:underline">Access</button>
+                      )}
+                      {s.active && s.id !== user.id && (user.role === "NATIONAL_ADMIN" || ((user.role === "DIRECTOR" || user.role === "SUBCOUNTY_OFFICER") && !["NATIONAL_ADMIN", "DIRECTOR"].includes(s.role) && !(user.role === "SUBCOUNTY_OFFICER" && s.role === "SUBCOUNTY_OFFICER"))) && (
+                        <button onClick={() => resetPassword(s)} className="text-xs font-medium text-kenya-green hover:underline">Reset password</button>
                       )}
                       {s.active && s.id !== user.id && !(user.role === "DIRECTOR" && ["NATIONAL_ADMIN", "DIRECTOR"].includes(s.role)) && (
                         <button onClick={() => deactivate(s)} className="text-xs font-medium text-kenya-red hover:underline">Deactivate</button>

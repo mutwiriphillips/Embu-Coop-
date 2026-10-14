@@ -17,6 +17,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
+    if (typeof window !== "undefined" && err?.response?.status === 403 && err.response.data?.code === "PASSWORD_CHANGE_REQUIRED") {
+      try {
+        const u = JSON.parse(window.localStorage.getItem("embu_user") || "null");
+        if (u) window.localStorage.setItem("embu_user", JSON.stringify({ ...u, mustChangePassword: true }));
+      } catch {}
+      if (window.location.pathname !== "/account/password") window.location.href = "/account/password";
+    }
     if (typeof window !== "undefined" && err?.response?.status === 401) {
       // Send the user back to the door they came in through: the
       // Cooperative Portal for managers, the staff login for everyone else.

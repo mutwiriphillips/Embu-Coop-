@@ -51,6 +51,13 @@ export function AuthProvider({ children }) {
     [router]
   );
 
+  // Replace the stored session (used after a password change, which issues a new token).
+  const updateSession = useCallback((token, nextUser) => {
+    window.localStorage.setItem("embu_token", token);
+    window.localStorage.setItem("embu_user", JSON.stringify(nextUser));
+    setUser(nextUser);
+  }, []);
+
   const logout = useCallback(() => {
     const target = sessionLoginPath();
     window.localStorage.removeItem("embu_token");
@@ -60,7 +67,7 @@ export function AuthProvider({ children }) {
   }, [router]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, cooperativeLogin, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, cooperativeLogin, logout, updateSession }}>
       {children}
     </AuthContext.Provider>
   );
