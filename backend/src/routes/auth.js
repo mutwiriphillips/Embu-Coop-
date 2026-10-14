@@ -1,5 +1,5 @@
 const express = require("express");
-const { login, me, signup } = require("../controllers/authController");
+const { login, me, signup, changePassword } = require("../controllers/authController");
 const { authenticate } = require("../middleware/auth");
 const prisma = require("../config/db");
 
@@ -8,6 +8,7 @@ const router = express.Router();
 router.post("/login", login);
 router.post("/signup", signup); // gated internally by ALLOW_OPEN_SIGNUP
 router.get("/me", authenticate, me);
+router.post("/change-password", authenticate, changePassword);
 
 // Public, minimal cooperative picker for the signup form (name/id only —
 // no member or financial data), scoped to a county the visitor selected.

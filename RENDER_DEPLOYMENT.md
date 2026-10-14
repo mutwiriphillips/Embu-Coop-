@@ -342,3 +342,40 @@ Adds one value, `OTHER_STAFF`, to the `StaffRole` enum. Additive: no existing ac
 
 Adds the `pdfjs-dist` dependency (pure JavaScript; installed by the normal `npm install` in the build).
 No schema change and no new environment variable. A canvas warning from the library is silenced at load time.
+
+## Backups and recovery (read this before real data goes in)
+
+**Where the data lives.** Everything (records and uploaded documents) is in the Render Postgres database `embu-coop-db`. The web services hold only code and settings, so suspending or replacing a web service loses nothing as long as the new one uses the same `DATABASE_URL`.
+
+**The database is the single point of failure.** Render's *free* Postgres expires after 30 days and is deleted with no recovery. For real data, upgrade `embu-coop-db` to a paid plan (daily backups and point-in-time recovery) and still keep your own copies below.
+
+### Three ways to keep your own copy
+1. **In the app (no setup).** National Admin: Dashboard -> *Database backup* -> *Download backup*. Saves one `.jsonl.gz` file. Do this weekly and before any change to Render.
+2. **Nightly automatic copy.** `.github/workflows/nightly-backup.yml` takes an encrypted `pg_dump` every night and keeps it 30 days as a private GitHub artifact. Needs the repo to be **private** and two secrets (`BACKUP_DATABASE_URL` = the database's *External* connection string, `BACKUP_PASSPHRASE`). Run it once manually from the Actions tab to confirm it works. Download the latest file to your own storage monthly.
+3. **From a computer.** In `backend/`, with `DATABASE_URL` set to the External URL: `npm run backup`.
+
+Backups contain personal data and password hashes. Never email them or put them in a shared folder.
+
+### If only a web service was suspended
+Create the new service from the same code and set the **same** `DATABASE_URL` (Internal URL if same region), the same `JWT_SECRET` (otherwise everyone logs in again), `FRONTEND_ORIGIN`, `ALLOW_OPEN_SIGNUP`, `ENFORCE_GENDER_RULE`. Point the frontend's `NEXT_PUBLIC_API_BASE_URL` at the new backend URL. Do not run `reset:all`. If you used the Blueprint, make sure it did not create a second empty database.
+
+### If the database is lost
+1. Create a new Postgres database on Render.
+2. On a computer with the code: set `DATABASE_URL` to the new database's External URL and run `npx prisma db push` (creates the empty tables).
+3. **Before the backend starts for the first time**, load the backup:
+   - app backup file: `npm run restore -- file.jsonl.gz` (a preview), then `npm run restore -- file.jsonl.gz --apply`;
+   - nightly file: `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_PASSPHRASE -in file.dump.enc -out file.dump`, then `pg_restore --no-owner --no-acl -d "$DATABASE_URL" file.dump`.
+4. Point the backend's `DATABASE_URL` at the new database, redeploy, log in and spot-check a cooperative, its members and a document.
+
+`restore` only adds missing rows; it never updates or deletes, so re-running it is safe. Loading before the first start matters because the start-up geography sync would otherwise create counties/wards with different ids.
+
+Not covered: anything entered after the last backup. That is why the nightly copy exists.
+
+## Security hardening (read with SECURITY_ASSESSMENT.md)
+
+- **Passwords.** Any sign-in with the published test password `Pilot2026!` forces an immediate password change (`FORCE_DEFAULT_PASSWORD_CHANGE`, default on). Passwords need 10+ characters with letters and numbers. A Director or National Admin can issue a temporary password from *Staff & Access → Reset password*; the person must replace it at next sign-in.
+- **Open sign-up must stay off.** `ALLOW_OPEN_SIGNUP` = `false` on the backend service. Check it in the Render dashboard, not only in `render.yaml`.
+- **Proxy setting.** `TRUST_PROXY_HOPS` = `1` on Render (default). Without it the sign-in limits cannot tell visitors apart.
+- **Signing secret.** In production the server refuses to start unless `JWT_SECRET` is at least 32 characters (Render's generated value is).
+- **Build.** The backend build uses `npm install --omit=optional` (drops install-time packages with advisories that the app does not need).
+- The repository must be **private**; enable GitHub secret scanning and push protection.

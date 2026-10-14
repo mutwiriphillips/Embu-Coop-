@@ -24,7 +24,7 @@ const { execSync } = require("child_process");
 const { defaultPermissionsForRole } = require("../src/utils/rolePermissions");
 
 const prisma = new PrismaClient();
-const PILOT_PASSWORD = "Pilot2026!";
+const PILOT_PASSWORD = "Pilot2026!"; // published test password: any sign-in with it forces a change
 
 async function ensureCounties() {
   const count = await prisma.county.count();

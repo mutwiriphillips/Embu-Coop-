@@ -35,7 +35,10 @@ function errorHandler(err, req, res, next) {
 
   console.error(err);
   const status = err.status || 500;
-  return res.status(status).json({ error: err.message || "Internal server error" });
+  // Deliberate 4xx messages are meant for the user; an unexpected 5xx can carry
+  // database or file details, so production shows a generic message instead.
+  const hide = status >= 500 && process.env.NODE_ENV === "production";
+  return res.status(status).json({ error: hide ? "Internal server error" : err.message || "Internal server error" });
 }
 
 module.exports = errorHandler;

@@ -65,17 +65,23 @@ async function register(req, res) {
     include: { account: true },
   });
 
-  if (!member) {
-    return res.status(404).json({
-      error: "No member record found matching that National ID for the selected cooperative. Ask your Cooperative Manager or Field Officer to confirm your registration first.",
-    });
+  // A National ID is not a secret, so the ID alone must not let anyone claim a
+  // member's account. The phone number must also match the one the cooperative
+  // recorded. Both failures give the same answer, so this can't be used to find
+  // out who is a member.
+  const lastNine = (v) => String(v || "").replace(/\D/g, "").slice(-9);
+  const notFound = {
+    error: "We could not match those details to a member record. Check the National ID and the phone number your cooperative has on file, or ask your Cooperative Manager to confirm your registration.",
+  };
+  if (!member || !member.phoneNumber || lastNine(member.phoneNumber).length < 9 || lastNine(member.phoneNumber) !== lastNine(data.phoneNumber)) {
+    return res.status(404).json(notFound);
   }
 
   if (member.account) {
     return res.status(409).json({ error: "An account already exists for this member. Please log in instead." });
   }
 
-  const passwordHash = await bcrypt.hash(data.password, 10);
+  const passwordHash = await bcrypt.hash(data.password, 12);
 
   const account = await prisma.memberAccount.create({
     data: {

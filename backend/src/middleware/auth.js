@@ -1,6 +1,13 @@
 const jwt = require("jsonwebtoken");
 const prisma = require("../config/db");
 const { inArea } = require("../utils/geography");
+const { issuedBeforeChange } = require("../utils/passwordPolicy");
+
+// Only HS256 is ever issued; refuse anything else (no "none"/algorithm switching).
+const JWT_OPTIONS = { algorithms: ["HS256"] };
+
+// While an account must change its password, only these calls work.
+const ALLOWED_WHEN_PASSWORD_CHANGE_REQUIRED = new Set(["/api/auth/me", "/api/auth/change-password", "/api/cooperative-auth/me"]);
 
 /**
  * Verifies the JWT bearer token and attaches the authenticated user
@@ -15,7 +22,7 @@ async function authenticate(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = jwt.verify(token, process.env.JWT_SECRET, JWT_OPTIONS);
     // Positive check, not a deny-list: staff tokens are the only ones ever
     // signed with type "staff" (see authController.signToken). Explicitly
     // requiring that — rather than only excluding "member" by name — means
@@ -43,6 +50,14 @@ async function authenticate(req, res, next) {
     const expectedType = user.role === "COOPERATIVE_MANAGER" ? "cooperative" : "staff";
     if (payload.type !== expectedType) {
       return res.status(401).json({ error: "Invalid token type for this account" });
+    }
+
+    // A password change/reset ends every older session.
+    if (issuedBeforeChange(payload.iat, user.passwordChangedAt)) {
+      return res.status(401).json({ error: "Your password was changed. Please sign in again." });
+    }
+    if (user.mustChangePassword && !ALLOWED_WHEN_PASSWORD_CHANGE_REQUIRED.has(`${req.baseUrl}${req.path}`)) {
+      return res.status(403).json({ error: "You must change your password before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
     }
 
     req.user = user;
@@ -149,7 +164,7 @@ async function authenticateMember(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = jwt.verify(token, process.env.JWT_SECRET, JWT_OPTIONS);
     if (payload.type !== "member") {
       return res.status(401).json({ error: "Invalid token type for this endpoint" });
     }
@@ -218,7 +233,7 @@ async function authenticateAgrovet(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = jwt.verify(token, process.env.JWT_SECRET, JWT_OPTIONS);
     if (payload.type !== "agrovet") {
       return res.status(401).json({ error: "Invalid token type for this endpoint" });
     }

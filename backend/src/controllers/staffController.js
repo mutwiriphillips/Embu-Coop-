@@ -5,7 +5,8 @@ const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
 const { resolveLocation, areaScope, httpError } = require("../utils/geography");
 const { toPublicUser } = require("./authController");
-const { assertValidSupervisor } = require("../utils/hierarchy");
+const { assertValidSupervisor, RANK } = require("../utils/hierarchy");
+const { checkNewPassword } = require("../utils/passwordPolicy");
 
 // HTML forms send "" for every blank field. z.string().uuid().optional()
 // rejects "" (it's neither absent nor a valid id), which made EVERY staff
@@ -16,7 +17,7 @@ const blankToUndefined = (schema) => z.preprocess((v) => (v === "" || v === null
 const createStaffSchema = z.object({
   fullName: z.string().min(1),
   email: z.string().email(),
-  password: z.string().min(8),
+  password: z.string().min(1),
   role: z.enum(["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER", "FIELD_OFFICER", "COOPERATIVE_MANAGER", "OTHER_STAFF"]),
   countyId: blankToUndefined(z.string().uuid().optional()),
   cooperativeId: blankToUndefined(z.string().uuid().optional()),
@@ -141,7 +142,9 @@ async function createStaff(req, res) {
     throw httpError(400, "Choose the sub-county this officer covers");
   }
 
-  const passwordHash = await bcrypt.hash(data.password, 10);
+  const pwProblem = checkNewPassword(data.password, { email: data.email });
+  if (pwProblem) throw httpError(400, `Password: ${pwProblem}`);
+  const passwordHash = await bcrypt.hash(data.password, 12);
 
   const user = await prisma.user.create({
     data: {
@@ -272,6 +275,28 @@ async function deactivateStaff(req, res) {
   res.json(toPublicUser(user));
 }
 
+// POST /api/staff/:id/reset-password { password }
+// Sets a temporary password. The person must change it at next sign-in and all
+// their existing sessions end. Only for someone more senior than the target
+// (a National Admin can reset anyone but themselves; use Change password).
+const resetPasswordSchema = z.object({ password: z.string().min(1) });
+async function resetPassword(req, res) {
+  const { password } = resetPasswordSchema.parse(req.body);
+  const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
+  if (target.id === req.user.id) throw httpError(400, "Use Change password for your own account");
+  if (req.user.role !== "NATIONAL_ADMIN" && !(RANK[req.user.role] < RANK[target.role])) {
+    throw httpError(403, "You can only reset passwords for staff who are junior to you");
+  }
+  const problem = checkNewPassword(password, { email: target.email });
+  if (problem) throw httpError(400, `Password: ${problem}`);
+  await prisma.user.update({
+    where: { id: target.id },
+    data: { passwordHash: await bcrypt.hash(password, 12), mustChangePassword: true, passwordChangedAt: new Date() },
+  });
+  await recordAudit({ userId: req.user.id, action: "RESET_STAFF_PASSWORD", entityType: "User", entityId: target.id });
+  res.json({ ok: true, message: `${target.fullName} must choose a new password at next sign-in.` });
+}
+
 async function reactivateStaff(req, res) {
   const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
   if (req.user.role === "DIRECTOR" && SENIOR_ROLES.includes(target.role)) {
@@ -338,6 +363,7 @@ module.exports = {
   updateStaff,
   deactivateStaff,
   reactivateStaff,
+  resetPassword,
   staffActivity,
   setPermission,
 };

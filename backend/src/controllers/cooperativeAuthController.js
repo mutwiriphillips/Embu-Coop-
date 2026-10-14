@@ -2,7 +2,7 @@ const bcrypt = require("bcryptjs");
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
-const { signToken, toPublicUser } = require("./authController");
+const { signToken, toPublicUser, flagDefaultPassword } = require("./authController");
 
 // The Cooperative Portal's own sign-in. Like the farmer portal, it accepts
 // the identifier people actually know: the manager's email OR the
@@ -58,6 +58,7 @@ async function login(req, res) {
     });
   }
 
+  await flagDefaultPassword(user, password);
   const token = signToken(user);
   await recordAudit({ userId: user.id, action: "COOPERATIVE_PORTAL_LOGIN", entityType: "User", entityId: user.id });
   res.json({ token, user: toPublicUser(user) });

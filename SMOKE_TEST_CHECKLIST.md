@@ -15,7 +15,7 @@ Fill in your real URLs once, here, then use them for every step:
 - Backend URL: `_______________________________`
 - Frontend URL: `_______________________________`
 
-All seeded accounts share the password `Pilot2026!` unless noted.
+All seeded accounts share the password `Pilot2026!` unless noted. **Every first sign-in with it now forces a password change** (you land on Change password); choose a new one, then continue. Staff passwords need 10+ characters with letters and numbers.
 
 ---
 
@@ -136,7 +136,7 @@ As Director or National Admin:
 - [ ] Cooperative's credit band from Phase 4 is visible here too
 - [ ] Contributions tab: make a (simulated) digital contribution — confirm it's clearly labeled as simulated, not implying a real M-Pesa charge happened
 - [ ] Produce tab is **read-only** — confirm there is no way to add a delivery as a farmer
-- [ ] Sign out, then register a brand-new farmer via `/member/register` against the new cooperative/member created in Phase 2
+- [ ] Sign out, then register a brand-new farmer via `/member/register` against the new cooperative/member created in Phase 2 (use the National ID **and the same phone number** the cooperative recorded; a different phone must be refused with the generic "could not match" message)
 - [ ] Confirm registration with a National ID that does **not** match any real Member record is rejected with a clear message, not a silent failure or a 500 error
 
 ## Phase 8b — Agrovet Portal (10 minutes)

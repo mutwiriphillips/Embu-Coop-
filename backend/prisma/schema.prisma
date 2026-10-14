@@ -18,7 +18,7 @@ model County {
   id        String   @id @default(uuid())
   name      String   @unique
   code      String   @unique // official county code, e.g. "014" for Embu
-  region    String   // former province grouping, for dashboard sub-filters
+  region    String // former province grouping, for dashboard sub-filters
   createdAt DateTime @default(now())
 
   staff        User[]
@@ -32,60 +32,65 @@ model County {
 // ---------------------------------------------------------------------------
 
 enum StaffRole {
-  NATIONAL_ADMIN       // cross-county oversight (State Dept. of Cooperatives)
-  DIRECTOR             // County Director of Co-operative Development
+  NATIONAL_ADMIN // cross-county oversight (State Dept. of Cooperatives)
+  DIRECTOR // County Director of Co-operative Development
   SUBCOUNTY_OFFICER
   FIELD_OFFICER
   COOPERATIVE_MANAGER
-  OTHER_STAFF          // any other position (accountant, clerk, ...): title + reporting line set by Director/National Admin
+  OTHER_STAFF // any other position (accountant, clerk, ...): title + reporting line set by Director/National Admin
 }
 
 model User {
-  id             String    @id @default(uuid())
-  fullName       String
-  jobGroup       String?
-  designation    String?
-  phoneNumber    String?
-  email          String    @unique
-  passwordHash   String
-  role           StaffRole
-  countyId       String?
-  county         County?   @relation(fields: [countyId], references: [id])
-  subCounty      String?
-  ward           String?
+  id                 String       @id @default(uuid())
+  fullName           String
+  jobGroup           String?
+  designation        String?
+  phoneNumber        String?
+  email              String       @unique
+  passwordHash       String
+  role               StaffRole
+  countyId           String?
+  county             County?      @relation(fields: [countyId], references: [id])
+  subCounty          String?
+  ward               String?
   // Structured location (County -> Sub-County -> Ward). The text fields above
   // are kept in sync with these names so existing screens keep working.
-  subCountyId    String?
-  subCountyRef   SubCounty?  @relation("UserSubCounty", fields: [subCountyId], references: [id])
-  wardId         String?
-  wardRef        Ward?       @relation("UserWard", fields: [wardId], references: [id])
-  reportsToId    String?
-  reportsTo      User?     @relation("ReportingLine", fields: [reportsToId], references: [id])
-  reports        User[]    @relation("ReportingLine")
-  active         Boolean   @default(true)
-  permissions    Permission[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  subCountyId        String?
+  subCountyRef       SubCounty?   @relation("UserSubCounty", fields: [subCountyId], references: [id])
+  wardId             String?
+  wardRef            Ward?        @relation("UserWard", fields: [wardId], references: [id])
+  reportsToId        String?
+  reportsTo          User?        @relation("ReportingLine", fields: [reportsToId], references: [id])
+  reports            User[]       @relation("ReportingLine")
+  active             Boolean      @default(true)
+  // Set when the account still uses a known default password (or an admin
+  // issued a temporary one): every request is refused except changing it.
+  mustChangePassword Boolean      @default(false)
+  // Tokens issued before this moment are rejected (password changed/reset).
+  passwordChangedAt  DateTime?
+  permissions        Permission[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
-  fieldVisits      FieldVisit[]      @relation("VisitOfficer")
-  approvedVisits   FieldVisit[]      @relation("VisitApprover")
-  leaveRequests    LeaveRequest[]    @relation("LeaveApplicant")
-  approvedLeaves   LeaveRequest[]    @relation("LeaveApprover")
-  uploadedDocs     Document[]        @relation("DocUploader")
-  reviewedDocs     Document[]        @relation("DocReviewer")
-  approvedDocs     Document[]        @relation("DocApprover")
-  managedCoops     Cooperative[]     @relation("CoopManager")
-  auditLogs        AuditLog[]
-  recordedContributions Contribution[]     @relation("ContributionRecordedBy")
-  creditAssessmentsRun  CreditAssessment[] @relation("CreditAssessmentComputedBy")
-  recordedProduce       ProduceDelivery[]  @relation("ProduceRecordedBy")
-  recordedPayouts       Payout[]           @relation("PayoutRecordedBy")
-  recordedAssets        Asset[]            @relation("AssetRecordedBy")
-  recordedAssetEvents   AssetEvent[]       @relation("AssetEventRecordedBy")
-  reviewedAgrovets      AgrovetShop[]      @relation("AgrovetReviewer")
-  approvedAgrovets      AgrovetShop[]      @relation("AgrovetApprover")
-  registeredAgrovets    AgrovetShop[]      @relation("AgrovetRegisteredBy")
-  creditsAllocated      FarmerInputCredit[] @relation("CreditAllocatedBy")
+  fieldVisits             FieldVisit[]           @relation("VisitOfficer")
+  approvedVisits          FieldVisit[]           @relation("VisitApprover")
+  leaveRequests           LeaveRequest[]         @relation("LeaveApplicant")
+  approvedLeaves          LeaveRequest[]         @relation("LeaveApprover")
+  uploadedDocs            Document[]             @relation("DocUploader")
+  reviewedDocs            Document[]             @relation("DocReviewer")
+  approvedDocs            Document[]             @relation("DocApprover")
+  managedCoops            Cooperative[]          @relation("CoopManager")
+  auditLogs               AuditLog[]
+  recordedContributions   Contribution[]         @relation("ContributionRecordedBy")
+  creditAssessmentsRun    CreditAssessment[]     @relation("CreditAssessmentComputedBy")
+  recordedProduce         ProduceDelivery[]      @relation("ProduceRecordedBy")
+  recordedPayouts         Payout[]               @relation("PayoutRecordedBy")
+  recordedAssets          Asset[]                @relation("AssetRecordedBy")
+  recordedAssetEvents     AssetEvent[]           @relation("AssetEventRecordedBy")
+  reviewedAgrovets        AgrovetShop[]          @relation("AgrovetReviewer")
+  approvedAgrovets        AgrovetShop[]          @relation("AgrovetApprover")
+  registeredAgrovets      AgrovetShop[]          @relation("AgrovetRegisteredBy")
+  creditsAllocated        FarmerInputCredit[]    @relation("CreditAllocatedBy")
   reimbursementsProcessed AgrovetReimbursement[] @relation("ReimbursementProcessedBy")
 
   @@index([countyId])
@@ -93,12 +98,12 @@ model User {
 
 // Granular module/tab access rights, assignable by the Director.
 model Permission {
-  id       String @id @default(uuid())
-  userId   String
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  module   String // e.g. "cooperatives", "documents", "governance", "field_ops", "staff"
-  canView  Boolean @default(true)
-  canEdit  Boolean @default(false)
+  id         String  @id @default(uuid())
+  userId     String
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module     String // e.g. "cooperatives", "documents", "governance", "field_ops", "staff"
+  canView    Boolean @default(true)
+  canEdit    Boolean @default(false)
   canApprove Boolean @default(false)
 
   @@unique([userId, module])
@@ -115,19 +120,19 @@ enum LeaveStatus {
 }
 
 model LeaveRequest {
-  id            String      @id @default(uuid())
-  applicantId   String
-  applicant     User        @relation("LeaveApplicant", fields: [applicantId], references: [id])
-  leaveType     String      // annual, sick, compassionate, etc.
-  startDate     DateTime
-  endDate       DateTime
-  reason        String?
-  status        LeaveStatus @default(PENDING)
-  approverId    String?
-  approver      User?       @relation("LeaveApprover", fields: [approverId], references: [id])
-  decisionNote  String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id           String      @id @default(uuid())
+  applicantId  String
+  applicant    User        @relation("LeaveApplicant", fields: [applicantId], references: [id])
+  leaveType    String // annual, sick, compassionate, etc.
+  startDate    DateTime
+  endDate      DateTime
+  reason       String?
+  status       LeaveStatus @default(PENDING)
+  approverId   String?
+  approver     User?       @relation("LeaveApprover", fields: [approverId], references: [id])
+  decisionNote String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 }
 
 enum VisitStatus {
@@ -138,30 +143,30 @@ enum VisitStatus {
 }
 
 model FieldVisit {
-  id             String      @id @default(uuid())
-  officerId      String
-  officer        User        @relation("VisitOfficer", fields: [officerId], references: [id])
-  cooperativeId  String
-  cooperative    Cooperative @relation(fields: [cooperativeId], references: [id])
-  plannedDate    DateTime
-  purpose        String
-  status         VisitStatus @default(PLANNED)
-  approverId     String?
-  approver       User?       @relation("VisitApprover", fields: [approverId], references: [id])
-  report         VisitReport?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id            String       @id @default(uuid())
+  officerId     String
+  officer       User         @relation("VisitOfficer", fields: [officerId], references: [id])
+  cooperativeId String
+  cooperative   Cooperative  @relation(fields: [cooperativeId], references: [id])
+  plannedDate   DateTime
+  purpose       String
+  status        VisitStatus  @default(PLANNED)
+  approverId    String?
+  approver      User?        @relation("VisitApprover", fields: [approverId], references: [id])
+  report        VisitReport?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 }
 
 model VisitReport {
-  id             String     @id @default(uuid())
-  visitId        String     @unique
-  visit          FieldVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  narrative      String
-  achievements   String?
-  dataPoints     Json?
-  nextActions    String?
-  submittedAt    DateTime   @default(now())
+  id           String     @id @default(uuid())
+  visitId      String     @unique
+  visit        FieldVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  narrative    String
+  achievements String?
+  dataPoints   Json?
+  nextActions  String?
+  submittedAt  DateTime   @default(now())
 }
 
 // ---------------------------------------------------------------------------
@@ -180,44 +185,44 @@ enum ValueChain {
   FISHERIES
   LIVESTOCK
   POULTRY
-  SACCO          // savings & credit co-operative societies
+  SACCO // savings & credit co-operative societies
   HOUSING
-  TRANSPORT      // matatu/boda-boda transport SACCOs
+  TRANSPORT // matatu/boda-boda transport SACCOs
   HANDICRAFTS
   OTHER
 }
 
 model Cooperative {
-  id                 String      @id @default(uuid())
+  id                 String     @id @default(uuid())
   name               String
-  registrationNumber String      @unique
+  registrationNumber String     @unique
   registrationDate   DateTime?
   valueChain         ValueChain
   countyId           String
-  county             County      @relation(fields: [countyId], references: [id])
+  county             County     @relation(fields: [countyId], references: [id])
   subCounty          String
   ward               String
   subCountyId        String?
-  subCountyRef       SubCounty?  @relation("CoopSubCounty", fields: [subCountyId], references: [id])
+  subCountyRef       SubCounty? @relation("CoopSubCounty", fields: [subCountyId], references: [id])
   wardId             String?
-  wardRef            Ward?       @relation("CoopWard", fields: [wardId], references: [id])
+  wardRef            Ward?      @relation("CoopWard", fields: [wardId], references: [id])
   managerId          String?
-  manager            User?       @relation("CoopManager", fields: [managerId], references: [id])
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  manager            User?      @relation("CoopManager", fields: [managerId], references: [id])
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
-  members         Member[]
-  documents       Document[]
-  fieldVisits     FieldVisit[]
-  committees      Committee[]
-  agms            AGM[]
-  candidates      ElectionCandidate[]
-  contributions   Contribution[]
+  members           Member[]
+  documents         Document[]
+  fieldVisits       FieldVisit[]
+  committees        Committee[]
+  agms              AGM[]
+  candidates        ElectionCandidate[]
+  contributions     Contribution[]
   creditAssessments CreditAssessment[]
   produceDeliveries ProduceDelivery[]
-  payouts         Payout[]
-  assets          Asset[]
-  supervisoryBoard SupervisoryBoardMember[]
+  payouts           Payout[]
+  assets            Asset[]
+  supervisoryBoard  SupervisoryBoardMember[]
 
   @@index([valueChain])
   @@index([countyId, subCounty, ward])
@@ -231,24 +236,24 @@ enum Gender {
 }
 
 model Member {
-  id             String      @id @default(uuid())
-  cooperativeId  String
-  cooperative    Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
-  legalName      String
-  nationalId     String
-  phoneNumber    String?
-  gender         Gender
-  shareCapital   Decimal     @db.Decimal(14, 2) @default(0)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id            String      @id @default(uuid())
+  cooperativeId String
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  legalName     String
+  nationalId    String
+  phoneNumber   String?
+  gender        Gender
+  shareCapital  Decimal     @default(0) @db.Decimal(14, 2)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  contributions  Contribution[]
+  contributions     Contribution[]
   produceDeliveries ProduceDelivery[]
-  payouts        Payout[]
-  account        MemberAccount?
-  assets         Asset[]
-  inputCredits   FarmerInputCredit[]
-  inputCollections InputCollection[]
+  payouts           Payout[]
+  account           MemberAccount?
+  assets            Asset[]
+  inputCredits      FarmerInputCredit[]
+  inputCollections  InputCollection[]
 
   @@unique([cooperativeId, nationalId])
 }
@@ -267,10 +272,10 @@ model Member {
 // factor's absence rather than scoring it as a failure.
 
 enum AssetType {
-  LIVESTOCK      // e.g. dairy cattle, goats
-  POULTRY        // e.g. layer/broiler flocks
-  VEHICLE        // Transport SACCOs — boda boda, matatu
-  PROPERTY_UNIT  // Housing cooperatives — a unit/plot
+  LIVESTOCK // e.g. dairy cattle, goats
+  POULTRY // e.g. layer/broiler flocks
+  VEHICLE // Transport SACCOs — boda boda, matatu
+  PROPERTY_UNIT // Housing cooperatives — a unit/plot
   OTHER
 }
 
@@ -278,7 +283,7 @@ enum AssetStatus {
   ACTIVE
   TRANSFERRED
   SOLD
-  DECEASED       // livestock/poultry only, in practice
+  DECEASED // livestock/poultry only, in practice
   WRITTEN_OFF
 }
 
@@ -289,8 +294,8 @@ model Asset {
   cooperativeId    String
   cooperative      Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
   assetType        AssetType
-  identifier       String      // ear tag, plate number, unit number — whatever traces this specific asset
-  description      String?     // breed, make/model, unit details
+  identifier       String // ear tag, plate number, unit number — whatever traces this specific asset
+  description      String? // breed, make/model, unit details
   acquisitionDate  DateTime
   acquisitionValue Decimal?    @db.Decimal(14, 2)
   currentValue     Decimal?    @db.Decimal(14, 2) // updated by VALUATION_UPDATE events
@@ -300,7 +305,7 @@ model Asset {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  events           AssetEvent[]
+  events AssetEvent[]
 
   @@unique([cooperativeId, identifier])
   @@index([memberId])
@@ -314,23 +319,23 @@ enum AssetEventType {
   DECEASED
   WRITTEN_OFF
   VALUATION_UPDATE
-  HEALTH_CHECK      // livestock/poultry: a vet or field-officer wellness record
+  HEALTH_CHECK // livestock/poultry: a vet or field-officer wellness record
 }
 
 // Every lifecycle moment for an asset — this is the audit trail a lender (or
 // a Director) can actually trust, and what "dead-cow swap" style fraud looks
 // like when it's a logged event chain instead of a self-report.
 model AssetEvent {
-  id            String         @id @default(uuid())
-  assetId       String
-  asset         Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  eventType     AssetEventType
-  eventDate     DateTime
-  notes         String?
-  valueAtEvent  Decimal?       @db.Decimal(14, 2)
-  recordedById  String?
-  recordedBy    User?          @relation("AssetEventRecordedBy", fields: [recordedById], references: [id])
-  createdAt     DateTime       @default(now())
+  id           String         @id @default(uuid())
+  assetId      String
+  asset        Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  eventType    AssetEventType
+  eventDate    DateTime
+  notes        String?
+  valueAtEvent Decimal?       @db.Decimal(14, 2)
+  recordedById String?
+  recordedBy   User?          @relation("AssetEventRecordedBy", fields: [recordedById], references: [id])
+  createdAt    DateTime       @default(now())
 
   @@index([assetId, eventDate])
 }
@@ -386,19 +391,19 @@ enum PaymentMethod {
 }
 
 model Contribution {
-  id               String              @id @default(uuid())
+  id               String           @id @default(uuid())
   memberId         String
-  member           Member              @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member           Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
   cooperativeId    String
-  cooperative      Cooperative         @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
-  amount           Decimal             @db.Decimal(14, 2)
-  type             ContributionType    @default(MONTHLY_CONTRIBUTION)
-  method           PaymentMethod       @default(CASH)
-  externalRef      String?             // e.g. M-Pesa receipt number, for future Daraja reconciliation
+  cooperative      Cooperative      @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  amount           Decimal          @db.Decimal(14, 2)
+  type             ContributionType @default(MONTHLY_CONTRIBUTION)
+  method           PaymentMethod    @default(CASH)
+  externalRef      String? // e.g. M-Pesa receipt number, for future Daraja reconciliation
   contributionDate DateTime
   recordedById     String?
-  recordedBy       User?               @relation("ContributionRecordedBy", fields: [recordedById], references: [id])
-  createdAt        DateTime            @default(now())
+  recordedBy       User?            @relation("ContributionRecordedBy", fields: [recordedById], references: [id])
+  createdAt        DateTime         @default(now())
 
   @@index([memberId, contributionDate])
   @@index([cooperativeId, contributionDate])
@@ -421,24 +426,24 @@ enum ProduceUnit {
 }
 
 model ProduceDelivery {
-  id            String       @id @default(uuid())
+  id            String      @id @default(uuid())
   memberId      String
-  member        Member       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member        Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
   cooperativeId String
-  cooperative   Cooperative  @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
-  produceType   String       // e.g. "Coffee Cherries", "Whole Milk" — free text, suggested from the cooperative's value chain
-  quantity      Decimal      @db.Decimal(12, 2)
-  unit          ProduceUnit  @default(KG)
-  qualityGrade  String?      // e.g. "AA", "AB", "PB" for coffee
-  ratePerUnit   Decimal?     @db.Decimal(10, 2) // KES per unit, may be set later once the buyer's price is known
-  totalValue    Decimal?     @db.Decimal(14, 2) // quantity * ratePerUnit, snapshotted when set
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  produceType   String // e.g. "Coffee Cherries", "Whole Milk" — free text, suggested from the cooperative's value chain
+  quantity      Decimal     @db.Decimal(12, 2)
+  unit          ProduceUnit @default(KG)
+  qualityGrade  String? // e.g. "AA", "AB", "PB" for coffee
+  ratePerUnit   Decimal?    @db.Decimal(10, 2) // KES per unit, may be set later once the buyer's price is known
+  totalValue    Decimal?    @db.Decimal(14, 2) // quantity * ratePerUnit, snapshotted when set
   deliveryDate  DateTime
-  paid          Boolean      @default(false)
+  paid          Boolean     @default(false)
   payoutId      String?
-  payout        Payout?      @relation(fields: [payoutId], references: [id])
+  payout        Payout?     @relation(fields: [payoutId], references: [id])
   recordedById  String?
-  recordedBy    User?        @relation("ProduceRecordedBy", fields: [recordedById], references: [id])
-  createdAt     DateTime     @default(now())
+  recordedBy    User?       @relation("ProduceRecordedBy", fields: [recordedById], references: [id])
+  createdAt     DateTime    @default(now())
 
   @@index([memberId, deliveryDate])
   @@index([cooperativeId, deliveryDate])
@@ -455,20 +460,20 @@ enum PayoutType {
 // data the Director's compliance dashboard reports on: exactly how much
 // each farmer was compensated, and when.
 model Payout {
-  id            String      @id @default(uuid())
+  id            String        @id @default(uuid())
   memberId      String
-  member        Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member        Member        @relation(fields: [memberId], references: [id], onDelete: Cascade)
   cooperativeId String
-  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
-  amount        Decimal     @db.Decimal(14, 2)
-  type          PayoutType  @default(PRODUCE_PAYMENT)
+  cooperative   Cooperative   @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  amount        Decimal       @db.Decimal(14, 2)
+  type          PayoutType    @default(PRODUCE_PAYMENT)
   method        PaymentMethod @default(CASH)
   externalRef   String?
-  periodLabel   String?     // e.g. "July 2026" — free text grouping for reporting
+  periodLabel   String? // e.g. "July 2026" — free text grouping for reporting
   payoutDate    DateTime
   recordedById  String?
-  recordedBy    User?       @relation("PayoutRecordedBy", fields: [recordedById], references: [id])
-  createdAt     DateTime    @default(now())
+  recordedBy    User?         @relation("PayoutRecordedBy", fields: [recordedById], references: [id])
+  createdAt     DateTime      @default(now())
 
   produceDeliveries ProduceDelivery[]
 
@@ -483,9 +488,9 @@ model CreditAssessment {
   id            String      @id @default(uuid())
   cooperativeId String
   cooperative   Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
-  score         Int         // 0-100 composite
-  band          String      // AA / A / B / C / D — see utils/creditScore.js
-  breakdown     Json        // per-factor scores + raw inputs, for transparency
+  score         Int // 0-100 composite
+  band          String // AA / A / B / C / D — see utils/creditScore.js
+  breakdown     Json // per-factor scores + raw inputs, for transparency
   computedById  String?
   computedBy    User?       @relation("CreditAssessmentComputedBy", fields: [computedById], references: [id])
   createdAt     DateTime    @default(now())
@@ -515,25 +520,25 @@ enum ApprovalStatus {
 }
 
 model Document {
-  id             String         @id @default(uuid())
-  cooperativeId  String
-  cooperative    Cooperative    @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
-  docType        DocumentType
-  title          String
-  storageKey     String         // key/path in object storage; pre-signed URL generated on demand
-  fileSizeBytes  Int
-  status         ApprovalStatus @default(PENDING)
-  uploadedById   String
-  uploadedBy     User           @relation("DocUploader", fields: [uploadedById], references: [id])
-  reviewedById   String?
-  reviewedBy     User?          @relation("DocReviewer", fields: [reviewedById], references: [id])
-  reviewedAt     DateTime?
-  approvedById   String?
-  approvedBy     User?          @relation("DocApprover", fields: [approvedById], references: [id])
-  approvedAt     DateTime?
-  rejectionNote  String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id            String         @id @default(uuid())
+  cooperativeId String
+  cooperative   Cooperative    @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  docType       DocumentType
+  title         String
+  storageKey    String // key/path in object storage; pre-signed URL generated on demand
+  fileSizeBytes Int
+  status        ApprovalStatus @default(PENDING)
+  uploadedById  String
+  uploadedBy    User           @relation("DocUploader", fields: [uploadedById], references: [id])
+  reviewedById  String?
+  reviewedBy    User?          @relation("DocReviewer", fields: [reviewedById], references: [id])
+  reviewedAt    DateTime?
+  approvedById  String?
+  approvedBy    User?          @relation("DocApprover", fields: [approvedById], references: [id])
+  approvedAt    DateTime?
+  rejectionNote String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@index([cooperativeId, docType])
   @@index([status])
@@ -554,7 +559,7 @@ enum CommitteeRole {
   SECRETARY
   TREASURER
   BOARD_MEMBER
-  EXECUTIVE_MANAGER   // non-elected, excluded from 1/3 rule calc
+  EXECUTIVE_MANAGER // non-elected, excluded from 1/3 rule calc
   SUPERVISORY_CHAIR
   SUPERVISORY_SECRETARY
 }
@@ -568,37 +573,37 @@ enum CommitteeStatus {
 }
 
 model Committee {
-  id                 String          @id @default(uuid())
-  cooperativeId      String
-  cooperative        Cooperative     @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
-  committeeType      CommitteeType
-  termLengthYears     Int             @default(3)
-  status             CommitteeStatus @default(UPCOMING)
-  complianceOverride Boolean         @default(false)
+  id                    String            @id @default(uuid())
+  cooperativeId         String
+  cooperative           Cooperative       @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  committeeType         CommitteeType
+  termLengthYears       Int               @default(3)
+  status                CommitteeStatus   @default(UPCOMING)
+  complianceOverride    Boolean           @default(false)
   overrideJustification String?
-  members            CommitteeMember[]
-  signatories        Signatory[]
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  members               CommitteeMember[]
+  signatories           Signatory[]
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 }
 
 model CommitteeMember {
-  id                  String        @id @default(uuid())
-  committeeId         String
-  committee           Committee     @relation(fields: [committeeId], references: [id], onDelete: Cascade)
-  fullName            String
-  gender              Gender
-  role                CommitteeRole
-  electionDate        DateTime
-  reelectionDueDate   DateTime
+  id                String        @id @default(uuid())
+  committeeId       String
+  committee         Committee     @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  fullName          String
+  gender            Gender
+  role              CommitteeRole
+  electionDate      DateTime
+  reelectionDueDate DateTime
   // Identity and service dates. Nullable so committees recorded before these
   // fields existed stay valid; new entries must supply them (enforced in the
   // API) and older entries can be completed with the Edit action.
-  nationalId          String?
-  phoneNumber         String?
-  appointmentDate     DateTime?
-  retirementDate      DateTime?     // blank while serving
-  createdAt           DateTime      @default(now())
+  nationalId        String?
+  phoneNumber       String?
+  appointmentDate   DateTime?
+  retirementDate    DateTime? // blank while serving
+  createdAt         DateTime      @default(now())
 }
 
 // The cooperative's Supervisory Board: exactly three seats (Co-operative
@@ -620,7 +625,7 @@ model SupervisoryBoardMember {
   nationalId      String
   phoneNumber     String
   appointmentDate DateTime
-  retirementDate  DateTime?           // blank while serving
+  retirementDate  DateTime? // blank while serving
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
@@ -629,13 +634,13 @@ model SupervisoryBoardMember {
 
 // Highly restricted, auditable bank account signatories.
 model Signatory {
-  id           String    @id @default(uuid())
-  committeeId  String
-  committee    Committee @relation(fields: [committeeId], references: [id], onDelete: Cascade)
-  fullName     String
-  role         String
-  bankAccount  String
-  approvedAt   DateTime  @default(now())
+  id          String    @id @default(uuid())
+  committeeId String
+  committee   Committee @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  fullName    String
+  role        String
+  bankAccount String
+  approvedAt  DateTime  @default(now())
 }
 
 enum CandidateStatus {
@@ -663,14 +668,14 @@ enum AGMType {
 }
 
 model AGM {
-  id             String      @id @default(uuid())
-  cooperativeId  String
-  cooperative    Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
-  agmType        AGMType
-  meetingDate    DateTime
-  noticeStorageKey  String?  // Letter Calling for the AGM
-  minutesStorageKey String?  // Signed minutes
-  createdAt      DateTime    @default(now())
+  id                String      @id @default(uuid())
+  cooperativeId     String
+  cooperative       Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  agmType           AGMType
+  meetingDate       DateTime
+  noticeStorageKey  String? // Letter Calling for the AGM
+  minutesStorageKey String? // Signed minutes
+  createdAt         DateTime    @default(now())
 }
 
 // ---------------------------------------------------------------------------
@@ -696,45 +701,45 @@ enum AgrovetApprovalStatus {
 }
 
 model AgrovetShop {
-  id                String                @id @default(uuid())
-  name              String
-  ownerName         String
-  phoneNumber       String
-  email             String?
-  physicalAddress   String                // free text: shop/market location detail
-  countyId          String
-  county            County                @relation(fields: [countyId], references: [id])
-  subCounty         String?
-  ward              String?
-  subCountyId       String?
-  subCountyRef      SubCounty?            @relation("AgrovetSubCounty", fields: [subCountyId], references: [id])
-  wardId            String?
-  wardRef           Ward?                 @relation("AgrovetWard", fields: [wardId], references: [id])
-  status            AgrovetApprovalStatus @default(PENDING)
-  reviewedById      String?
-  reviewedBy        User?                 @relation("AgrovetReviewer", fields: [reviewedById], references: [id])
-  reviewedAt        DateTime?
-  approvedById      String?
-  approvedBy        User?                 @relation("AgrovetApprover", fields: [approvedById], references: [id])
-  approvedAt        DateTime?
-  rejectionNote     String?
+  id                  String                @id @default(uuid())
+  name                String
+  ownerName           String
+  phoneNumber         String
+  email               String?
+  physicalAddress     String // free text: shop/market location detail
+  countyId            String
+  county              County                @relation(fields: [countyId], references: [id])
+  subCounty           String?
+  ward                String?
+  subCountyId         String?
+  subCountyRef        SubCounty?            @relation("AgrovetSubCounty", fields: [subCountyId], references: [id])
+  wardId              String?
+  wardRef             Ward?                 @relation("AgrovetWard", fields: [wardId], references: [id])
+  status              AgrovetApprovalStatus @default(PENDING)
+  reviewedById        String?
+  reviewedBy          User?                 @relation("AgrovetReviewer", fields: [reviewedById], references: [id])
+  reviewedAt          DateTime?
+  approvedById        String?
+  approvedBy          User?                 @relation("AgrovetApprover", fields: [approvedById], references: [id])
+  approvedAt          DateTime?
+  rejectionNote       String?
   // Set when county staff registered the shop on the owner's behalf (rather
   // than the owner applying through /agrovet/apply). Nullable, so adding it
   // is a non-destructive schema change on the live database.
-  registeredById    String?
-  registeredBy      User?                 @relation("AgrovetRegisteredBy", fields: [registeredById], references: [id])
+  registeredById      String?
+  registeredBy        User?                 @relation("AgrovetRegisteredBy", fields: [registeredById], references: [id])
   // Where reimbursement is actually sent — deliberately separate from the
   // owner's own login phone number, since the two can differ (e.g. a
   // business till number vs a personal line).
-  reimbursementMsisdn String?             // M-Pesa till/paybill or phone for reimbursement
-  bankAccountDetails  String?             // optional alternative payment rail
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
+  reimbursementMsisdn String? // M-Pesa till/paybill or phone for reimbursement
+  bankAccountDetails  String? // optional alternative payment rail
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 
-  account           AgrovetAccount?
-  products          InputProduct[]
-  collections       InputCollection[]
-  reimbursements    AgrovetReimbursement[]
+  account        AgrovetAccount?
+  products       InputProduct[]
+  collections    InputCollection[]
+  reimbursements AgrovetReimbursement[]
 
   @@index([countyId, status])
 }
@@ -785,7 +790,7 @@ model InputProduct {
   id            String        @id @default(uuid())
   agrovetShopId String
   agrovetShop   AgrovetShop   @relation(fields: [agrovetShopId], references: [id], onDelete: Cascade)
-  name          String        // e.g. "DAP Fertilizer 50kg", "Farmyard Manure", "Jembe (hoe)"
+  name          String // e.g. "DAP Fertilizer 50kg", "Farmyard Manure", "Jembe (hoe)"
   category      InputCategory
   unit          InputUnit     @default(OTHER)
   unitPrice     Decimal       @db.Decimal(12, 2)
@@ -811,20 +816,20 @@ enum InputCreditStatus {
 // county's own Wezesha-style input support round, and new ones appear over
 // time, so this is free text like ProduceDelivery.produceType is.
 model FarmerInputCredit {
-  id               String            @id @default(uuid())
-  memberId         String
-  member           Member            @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  programName      String
-  totalAmount      Decimal           @db.Decimal(14, 2)
-  remainingAmount  Decimal           @db.Decimal(14, 2)
-  status           InputCreditStatus @default(ACTIVE)
-  allocatedById    String
-  allocatedBy      User              @relation("CreditAllocatedBy", fields: [allocatedById], references: [id])
-  allocatedDate    DateTime
-  expiryDate       DateTime?
-  createdAt        DateTime          @default(now())
+  id              String            @id @default(uuid())
+  memberId        String
+  member          Member            @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  programName     String
+  totalAmount     Decimal           @db.Decimal(14, 2)
+  remainingAmount Decimal           @db.Decimal(14, 2)
+  status          InputCreditStatus @default(ACTIVE)
+  allocatedById   String
+  allocatedBy     User              @relation("CreditAllocatedBy", fields: [allocatedById], references: [id])
+  allocatedDate   DateTime
+  expiryDate      DateTime?
+  createdAt       DateTime          @default(now())
 
-  collections      InputCollection[]
+  collections InputCollection[]
 
   @@index([memberId, status])
 }
@@ -842,23 +847,23 @@ enum CollectionStatus {
 // shop is the party with first-hand knowledge that goods actually changed
 // hands.
 model InputCollection {
-  id                  String             @id @default(uuid())
+  id                  String                @id @default(uuid())
   farmerInputCreditId String
-  farmerInputCredit   FarmerInputCredit  @relation(fields: [farmerInputCreditId], references: [id], onDelete: Cascade)
-  memberId            String             // denormalized for direct farmer-side queries
-  member              Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  farmerInputCredit   FarmerInputCredit     @relation(fields: [farmerInputCreditId], references: [id], onDelete: Cascade)
+  memberId            String // denormalized for direct farmer-side queries
+  member              Member                @relation(fields: [memberId], references: [id], onDelete: Cascade)
   agrovetShopId       String
-  agrovetShop         AgrovetShop        @relation(fields: [agrovetShopId], references: [id], onDelete: Cascade)
-  totalValue          Decimal            @db.Decimal(14, 2) // sum of line items, snapshotted
+  agrovetShop         AgrovetShop           @relation(fields: [agrovetShopId], references: [id], onDelete: Cascade)
+  totalValue          Decimal               @db.Decimal(14, 2) // sum of line items, snapshotted
   collectionDate      DateTime
-  status              CollectionStatus   @default(PENDING_REIMBURSEMENT)
+  status              CollectionStatus      @default(PENDING_REIMBURSEMENT)
   reimbursementId     String?
   reimbursement       AgrovetReimbursement? @relation(fields: [reimbursementId], references: [id])
   recordedByAgrovetId String
-  recordedByAgrovet   AgrovetAccount     @relation(fields: [recordedByAgrovetId], references: [id])
-  createdAt           DateTime           @default(now())
+  recordedByAgrovet   AgrovetAccount        @relation(fields: [recordedByAgrovetId], references: [id])
+  createdAt           DateTime              @default(now())
 
-  items               InputCollectionItem[]
+  items InputCollectionItem[]
 
   @@index([memberId, collectionDate])
   @@index([agrovetShopId, status])
@@ -886,19 +891,19 @@ model InputCollectionItem {
 // underlying government credit disbursement is genuine; only then do the
 // pending InputCollection rows for that shop move to REIMBURSED.
 model AgrovetReimbursement {
-  id            String        @id @default(uuid())
-  agrovetShopId String
-  agrovetShop   AgrovetShop   @relation(fields: [agrovetShopId], references: [id], onDelete: Cascade)
-  totalAmount   Decimal       @db.Decimal(14, 2)
-  periodLabel   String?       // e.g. "July 2026"
-  method        PaymentMethod @default(BANK_TRANSFER)
-  externalRef   String?
+  id                String        @id @default(uuid())
+  agrovetShopId     String
+  agrovetShop       AgrovetShop   @relation(fields: [agrovetShopId], references: [id], onDelete: Cascade)
+  totalAmount       Decimal       @db.Decimal(14, 2)
+  periodLabel       String? // e.g. "July 2026"
+  method            PaymentMethod @default(BANK_TRANSFER)
+  externalRef       String?
   reimbursementDate DateTime
-  processedById String
-  processedBy   User          @relation("ReimbursementProcessedBy", fields: [processedById], references: [id])
-  createdAt     DateTime      @default(now())
+  processedById     String
+  processedBy       User          @relation("ReimbursementProcessedBy", fields: [processedById], references: [id])
+  createdAt         DateTime      @default(now())
 
-  collections   InputCollection[]
+  collections InputCollection[]
 
   @@index([agrovetShopId, reimbursementDate])
 }

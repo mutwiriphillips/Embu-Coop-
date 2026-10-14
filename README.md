@@ -112,7 +112,7 @@ npm install
 npm run dev                # http://localhost:3000
 ```
 
-All pilot accounts share the password `Pilot2026!`:
+All pilot accounts share the password `Pilot2026!` (a published test password: the first sign-in forces a change; keep this repository private):
 - **National Admin:** admin@cooperatives.go.ke
 - **County Director (Embu):** director@embu.go.ke
 - **Sub-County Officer (Embu):** subcounty@embu.go.ke
@@ -488,3 +488,6 @@ Per the original commercial proposal, full IP and source code transfer to Embu
 County Government upon final payment milestone (M4) for the pilot engagement.
 Terms for a national rollout across all 47 counties would need a separate
 agreement with the State Department for Co-operatives.
+
+## Backups
+National Admin can download a full backup from the Dashboard ("Database backup"); `npm run backup` / `npm run restore` do the same from a computer, and `.github/workflows/nightly-backup.yml` keeps a nightly encrypted copy. See "Backups and recovery" in RENDER_DEPLOYMENT.md.

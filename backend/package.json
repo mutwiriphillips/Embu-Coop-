@@ -17,7 +17,10 @@
     "test:credit-score": "node src/utils/creditScore.test.js",
     "test:governance": "node src/utils/governance.test.js",
     "fix:staff-access": "node prisma/fix-staff-access.js",
-    "geo:sync": "node prisma/sync-geography.js"
+    "geo:sync": "node prisma/sync-geography.js",
+    "backup": "node prisma/backup.js",
+    "restore": "node prisma/restore.js",
+    "test:backup": "node src/utils/backup.test.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

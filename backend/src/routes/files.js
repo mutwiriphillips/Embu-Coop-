@@ -10,7 +10,7 @@ function authenticateStaffOrAgrovet(req, res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   let type = null;
-  try { type = token ? jwt.verify(token, process.env.JWT_SECRET).type : null; } catch { /* handled below */ }
+  try { type = token ? jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] }).type : null; } catch { /* handled below */ }
   if (type === "agrovet") return authenticateAgrovet(req, res, next);
   if (type === "staff" || type === "cooperative") return authenticate(req, res, next);
   return res.status(401).json({ error: "Sign in to view files" });

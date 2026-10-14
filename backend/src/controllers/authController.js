@@ -4,6 +4,8 @@ const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
 const { defaultPermissionsForRole } = require("../utils/rolePermissions");
+const { checkNewPassword, isKnownDefault, forceDefaultChange } = require("../utils/passwordPolicy");
+const { httpError } = require("../utils/geography");
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -17,7 +19,7 @@ const loginSchema = z.object({
 const signupSchema = z.object({
   fullName: z.string().min(1),
   email: z.string().email(),
-  password: z.string().min(8),
+  password: z.string().min(10),
   role: z.enum(["FIELD_OFFICER", "COOPERATIVE_MANAGER"]),
   countyId: z.string().uuid(),
   cooperativeId: z.string().uuid().optional(),
@@ -70,10 +72,46 @@ async function login(req, res) {
     });
   }
 
+  await flagDefaultPassword(user, password);
   const token = signToken(user);
   await recordAudit({ userId: user.id, action: "LOGIN", entityType: "User", entityId: user.id });
 
   res.json({ token, user: toPublicUser(user) });
+}
+
+/**
+ * A sign-in with the published test password flags the account: from then on
+ * it can do nothing except change its password. (Works on the live pilot with
+ * no re-seeding; the plaintext is only ever in hand at login.)
+ */
+async function flagDefaultPassword(user, password) {
+  if (forceDefaultChange() && isKnownDefault(password) && !user.mustChangePassword) {
+    await prisma.user.update({ where: { id: user.id }, data: { mustChangePassword: true } });
+    user.mustChangePassword = true;
+    await recordAudit({ userId: user.id, action: "DEFAULT_PASSWORD_FLAGGED", entityType: "User", entityId: user.id });
+  }
+}
+
+const changePasswordSchema = z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(1) });
+
+// POST /api/auth/change-password — any signed-in staff or cooperative manager.
+async function changePassword(req, res) {
+  const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    throw httpError(400, "Your current password is not correct.");
+  }
+  const problem = checkNewPassword(newPassword, { email: user.email, current: currentPassword });
+  if (problem) throw httpError(400, problem);
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash: await bcrypt.hash(newPassword, 12), mustChangePassword: false, passwordChangedAt: new Date() },
+    include: { permissions: true, county: true },
+  });
+  await recordAudit({ userId: user.id, action: "PASSWORD_CHANGED", entityType: "User", entityId: user.id });
+  // A fresh token so this session carries on; every older token stops working.
+  res.json({ token: signToken(updated), user: toPublicUser(updated) });
 }
 
 async function me(req, res) {
@@ -134,4 +172,4 @@ async function signup(req, res) {
   res.status(201).json({ token, user: toPublicUser(userWithCounty) });
 }
 
-module.exports = { login, me, signup, toPublicUser, signToken, tokenTypeForRole };
+module.exports = { login, me, signup, changePassword, flagDefaultPassword, toPublicUser, signToken, tokenTypeForRole };

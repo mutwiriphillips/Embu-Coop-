@@ -28,9 +28,22 @@ const cooperativeAuthRoutes = require("./routes/cooperativeAuth");
 const fileRoutes = require("./routes/files");
 const agrovetSelfRoutes = require("./routes/agrovetSelf");
 const agrovetRoutes = require("./routes/agrovets");
+const adminRoutes = require("./routes/admin");
 const errorHandler = require("./middleware/errorHandler");
 
+// Refuse to run in production with a missing or guessable signing secret.
+if (process.env.NODE_ENV === "production" && (process.env.JWT_SECRET || "").length < 32) {
+  console.error("FATAL: JWT_SECRET must be set to a random value of at least 32 characters.");
+  process.exit(1);
+}
+
 const app = express();
+
+// Behind Render's proxy the client's address arrives in X-Forwarded-For. Without
+// this every visitor looked like the same IP, so rate limits were shared by
+// everyone and could not tell an attacker from a user. Set TRUST_PROXY_HOPS=0
+// when running without a proxy.
+app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS ?? 1));
 
 app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || "http://localhost:3000", credentials: true }));
@@ -45,6 +58,25 @@ app.use(
     legacyHeaders: false,
   })
 );
+
+// Sign-in brute-force protection: failed attempts per IP + account, and a
+// looser cap per IP to stop one address trying many accounts. Successful
+// sign-ins are not counted.
+const identifierOf = (req) => String((req.body && (req.body.email || req.body.identifier || req.body.nationalId)) || "").trim().toLowerCase().slice(0, 120);
+const tooMany = { error: "Too many sign-in attempts. Please wait 15 minutes and try again." };
+const LOGIN_PATHS = ["/api/auth/login", "/api/cooperative-auth/login", "/api/member-auth/login", "/api/agrovet-auth/login"];
+app.use(LOGIN_PATHS, rateLimit({
+  windowMs: 15 * 60 * 1000, max: 8, skipSuccessfulRequests: true, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: (req) => `${req.ip}|${identifierOf(req)}`, message: tooMany,
+}));
+app.use(LOGIN_PATHS, rateLimit({
+  windowMs: 15 * 60 * 1000, max: 40, skipSuccessfulRequests: true, standardHeaders: true, legacyHeaders: false, message: tooMany,
+}));
+// Public sign-up style endpoints and password changes.
+app.use(["/api/auth/signup", "/api/member-auth/register", "/api/agrovet-auth/apply", "/api/auth/change-password"], rateLimit({
+  windowMs: 60 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  message: { error: "Too many requests from this address. Please try again later." },
+}));
 
 app.get("/api/health", (req, res) => res.json({ status: "ok", service: "embu-coop-backend" }));
 
@@ -70,6 +102,7 @@ app.use("/api/cooperative-auth", cooperativeAuthRoutes);
 app.use("/api/files", fileRoutes);
 app.use("/api/agrovet", agrovetSelfRoutes);
 app.use("/api/agrovets", agrovetRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 app.use(errorHandler);
