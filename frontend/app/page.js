@@ -1,15 +1,37 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../context/AuthContext";
 
 // Real, freely-licensed photography (Wikimedia Commons, CC-BY-SA) — no
 // AI-generated images and no depictions of real identifiable individuals.
-const HERO_IMG = "https://commons.wikimedia.org/wiki/Special:FilePath/Cycling_in_the_Eden_tea_farms.jpg?width=1600";
-const COAT_OF_ARMS_IMG = "https://commons.wikimedia.org/wiki/Special:FilePath/Coat_of_arms_of_Kenya.svg?width=140";
-const COUNTY_MAP_IMG = "https://commons.wikimedia.org/wiki/Special:FilePath/Kenya_county_map_labelled_with_names.svg?width=700";
+//
+// Each picture is looked for first in this site's own /public/images folder
+// (self-hosted: faster, private to visitors, and required for a .go.ke
+// launch), then falls back to Wikimedia. Wikimedia only serves its standard
+// thumbnail widths (…, 120, 250, 330, 500, 960, 1280, 1920); any other width,
+// such as the 1600/140/700 used before, is refused and the browser shows only
+// the alt text. If neither source loads, a plain coloured block is shown so the
+// page stays readable.
+const HERO_IMG = { local: "/images/tea-farms.jpg", remote: "https://commons.wikimedia.org/wiki/Special:FilePath/Cycling_in_the_Eden_tea_farms.jpg?width=1280" };
+const COAT_OF_ARMS_IMG = { local: "/images/coat-of-arms.svg", remote: "https://commons.wikimedia.org/wiki/Special:FilePath/Coat_of_arms_of_Kenya.svg?width=250" };
+const COUNTY_MAP_IMG = { local: "/images/county-map.svg", remote: "https://commons.wikimedia.org/wiki/Special:FilePath/Kenya_county_map_labelled_with_names.svg?width=960" };
+
+function SiteImage({ image, alt, className, fallbackClassName }) {
+  const [src, setSrc] = useState(image.local);
+  const [failed, setFailed] = useState(false);
+  if (failed) return fallbackClassName ? <div className={fallbackClassName} role="img" aria-label={alt} /> : null;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => (src === image.local ? setSrc(image.remote) : setFailed(true))}
+    />
+  );
+}
 
 const PORTALS = [
   {
@@ -45,7 +67,6 @@ const PORTALS = [
     body: "Directors, Sub-County Officers, and Field Officers.",
     signInWith: "Work email",
     signIn: "/login",
-    secondary: { href: "/signup", label: "Test-run signup" },
     accent: "border-t-kenya-black",
   },
 ];
@@ -95,7 +116,7 @@ export default function LandingPage() {
           to squeeze more items than a narrow screen can hold. */}
       <header className="flex items-center justify-between border-b border-gray-100 px-4 py-3 md:px-12 md:py-4">
         <div className="flex min-w-0 items-center gap-2 md:gap-3">
-          <img src={COAT_OF_ARMS_IMG} alt="Coat of Arms of Kenya" className="h-7 w-auto flex-shrink-0 md:h-10" />
+          <SiteImage image={COAT_OF_ARMS_IMG} alt="Coat of Arms of Kenya" className="h-7 w-auto flex-shrink-0 md:h-10" />
           <div className="min-w-0">
             <p className="truncate text-xs font-bold text-kenya-black md:text-sm">Republic of Kenya</p>
             <p className="truncate text-[10px] text-gray-500 md:text-xs">State Dept. for Co-operatives</p>
@@ -108,12 +129,6 @@ export default function LandingPage() {
           >
             Sign In
           </a>
-          <Link
-            href="/signup"
-            className="rounded-md bg-kenya-green px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-kenya-green/90 md:px-4 md:py-2 md:text-sm"
-          >
-            Test-Run
-          </Link>
         </div>
       </header>
 
@@ -126,7 +141,7 @@ export default function LandingPage() {
 
       {/* Mobile hero (stacked, no overlay) */}
       <section className="md:hidden">
-        <img src={HERO_IMG} alt="Tea farms in the Kenyan highlands" className="h-52 w-full object-cover" />
+        <SiteImage image={HERO_IMG} alt="Tea farms in the Kenyan highlands" className="h-52 w-full object-cover" fallbackClassName="h-52 w-full bg-kenya-green" />
         <div className="bg-kenya-black px-5 py-7">
           <h1 className="text-2xl font-extrabold leading-tight text-white">
             National Cooperative Management &amp; Governance System
@@ -158,7 +173,7 @@ export default function LandingPage() {
 
       {/* Desktop hero (image with text overlay) */}
       <section className="relative hidden overflow-hidden md:block">
-        <img src={HERO_IMG} alt="Tea farms in the Kenyan highlands" className="h-[460px] w-full object-cover" />
+        <SiteImage image={HERO_IMG} alt="Tea farms in the Kenyan highlands" className="h-[460px] w-full object-cover" fallbackClassName="h-[460px] w-full bg-kenya-black" />
         <div className="absolute inset-0 bg-gradient-to-r from-kenya-black/85 via-kenya-black/50 to-transparent" />
         <div className="absolute inset-0 flex items-center px-12">
           <div className="max-w-xl text-white">
@@ -252,8 +267,8 @@ export default function LandingPage() {
               and compliance status.
             </p>
           </div>
-          <img
-            src={COUNTY_MAP_IMG}
+          <SiteImage
+            image={COUNTY_MAP_IMG}
             alt="Map of the 47 counties of Kenya"
             className="mx-auto max-h-72 w-auto rounded-lg border border-gray-200 bg-white p-3 shadow-sm sm:max-h-96 sm:p-4"
           />

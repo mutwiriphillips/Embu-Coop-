@@ -81,9 +81,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <a href="/signup" className="mt-4 block text-center text-xs text-gray-500 hover:underline">
-          Test run — create an account
-        </a>
         <div className="mt-4 border-t border-gray-100 pt-4 text-center text-xs text-gray-500">
           Not county staff?{" "}
           <Link href="/member/login" className="font-medium text-kenya-green hover:underline">Farmer</Link>
