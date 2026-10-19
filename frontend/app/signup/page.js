@@ -10,7 +10,7 @@ import api from "../../lib/api";
 export default function SignupPage() {
   const router = useRouter();
   const [cooperatives, setCooperatives] = useState([]);
-  const { counties, loading: countiesLoading, error: countiesError, retry: retryCounties } = useCounties();
+  const { counties, loading: countiesLoading, error: countiesError, retry: retryCounties, waking: countiesWaking } = useCounties();
   const [disabled, setDisabled] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
@@ -93,6 +93,7 @@ export default function SignupPage() {
             loading={countiesLoading}
             error={countiesError}
             retry={retryCounties}
+            waking={countiesWaking}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-kenya-green focus:outline-none disabled:bg-gray-50"
           />
 

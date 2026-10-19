@@ -7,28 +7,52 @@ const { ensureCountyGeography, areaScope, httpError } = require("../utils/geogra
 // counties. If a deployment ever skipped seed-counties.js, or a database was
 // reset without reseeding, those dropdowns would silently render empty — so
 // if fewer than 47 rows exist, restore the missing ones here, idempotently
-// (upsert by official code: existing rows are only name/region-corrected,
-// never duplicated or deleted). Normally a no-op count query.
+// (inserted by official code, existing rows are never touched or deleted).
+// Checked once per server start, then remembered.
+let countiesVerified = false;
 async function ensureAllCounties() {
-  const count = await prisma.county.count();
-  if (count >= COUNTIES.length) return;
-  for (const [code, name, region] of COUNTIES) {
-    await prisma.county.upsert({
-      where: { code },
-      update: { name, region },
-      create: { code, name, region },
-    });
+  if (countiesVerified) return;
+  const existing = await prisma.county.findMany({ select: { code: true, name: true, region: true } });
+  if (existing.length < COUNTIES.length) {
+    // One batched insert for whatever is missing (not 47 round trips). Rows
+    // that already exist are skipped, so concurrent callers can't clash.
+    const have = new Set(existing.map((c) => c.code));
+    const missing = COUNTIES.filter(([code]) => !have.has(code)).map(([code, name, region]) => ({ code, name, region }));
+    if (missing.length) await prisma.county.createMany({ data: missing, skipDuplicates: true });
   }
+  countiesVerified = true;
+}
+
+// The official county list never changes while the server runs, and a sleepy
+// free-tier database makes every query slow, so the answer is kept in memory
+// for 10 minutes. Callers that arrive while it is being loaded share the one
+// query instead of each starting their own.
+const LIST_TTL_MS = 10 * 60 * 1000;
+let cached = null; // { at, rows }
+let loading = null;
+
+async function loadCounties() {
+  const started = Date.now();
+  await ensureAllCounties();
+  const rows = await prisma.county.findMany({ orderBy: { name: "asc" } });
+  const took = Date.now() - started;
+  if (took > 2000) console.warn(`[counties] slow county load: ${took} ms (database or cold start)`);
+  if (rows.length) cached = { at: Date.now(), rows };
+  return rows;
 }
 
 // Public: powers the landing page, signup form, and the dashboard county
 // selector. No sensitive data — just the 47 official counties.
 async function listCounties(req, res) {
-  await ensureAllCounties();
-  const counties = await prisma.county.findMany({
-    orderBy: { name: "asc" },
-  });
-  res.json(counties);
+  let rows;
+  if (cached && Date.now() - cached.at < LIST_TTL_MS) {
+    rows = cached.rows;
+  } else {
+    loading = loading || loadCounties().finally(() => { loading = null; });
+    rows = await loading;
+  }
+  res.set("Cache-Control", "public, max-age=300");
+  res.json(rows);
 }
 
 // National rollup: cooperative counts per county, for NATIONAL_ADMIN and for

@@ -1,0 +1,25 @@
+# Optional. Render's free web services sleep after ~15 minutes without traffic
+# and take up to a minute to wake. This pings the API every 10 minutes so the
+# first visitor of the day doesn't wait. It costs nothing, but note Render's
+# free allowance is ~750 instance-hours a month PER WORKSPACE: one always-awake
+# service fits (744 h); two do not. Keep only the backend awake. Delete this
+# file once you move to a paid plan.
+#
+# Setup: GitHub -> Settings -> Secrets and variables -> Actions -> Variables ->
+# New repository variable  BACKEND_HEALTH_URL = https://<your-backend>/api/health
+name: keep-awake
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+permissions: {}
+jobs:
+  ping:
+    if: ${{ vars.BACKEND_HEALTH_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping
+        env:
+          URL: ${{ vars.BACKEND_HEALTH_URL }}
+        run: curl -fsS --max-time 90 --retry 2 "$URL" || echo "ping failed (server may be waking)"

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../context/AuthContext";
-import Photo from "../components/Photo";
+import Photo, { HeroPhoto, HERO_FILE_PAGE } from "../components/Photo";
+import WarmUp from "../components/WarmUp";
 
 // The five farm photographs live in components/Photo.js. The coat of arms and
 // the county map below are looked for first in this site's own /public/images folder
@@ -142,6 +143,8 @@ export default function LandingPage() {
         </div>
       </header>
 
+      <WarmUp />
+
       {/* Hero — two entirely separate structures, not one flexible markup
           stretched across breakpoints. Mobile never overlays text on the
           photo at all: image on top, then a solid content block underneath
@@ -152,7 +155,7 @@ export default function LandingPage() {
       {/* Mobile hero (stacked, no overlay) */}
       <section className="md:hidden">
         <div className="bg-kenya-black">
-          <Photo id="farmers" priority sizes="100vw" className="h-72 w-full" />
+          <HeroPhoto sizes="100vw" className="h-64 w-full" />
         </div>
         <div className="bg-kenya-black px-5 py-7">
           <h1 className="text-2xl font-extrabold leading-tight text-white">
@@ -183,12 +186,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Desktop hero: text on the left, one photograph of farmers at work on the
-          right (stacked under the text on tablets), shown no larger than its real size. */}
-      <section className="hidden bg-kenya-black md:block">
-        <div className="mx-auto grid max-w-6xl gap-8 px-8 py-10 lg:grid-cols-12 lg:items-center lg:px-12 lg:py-12">
-          <div className="text-white lg:col-span-5">
-            <h1 className="text-4xl font-extrabold leading-tight">
+      {/* Desktop hero: the photograph fills the whole section, with a dark fade
+          on the left under the text. */}
+      <section className="relative hidden min-h-[560px] overflow-hidden bg-kenya-black md:block lg:min-h-[640px]">
+        <HeroPhoto fill sizes="100vw" position="50% 40%" />
+        {/* Darkens the left side so the text reads; the photo shows fully on the right. */}
+        <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/55 to-black/10" aria-hidden="true" />
+        <div className="relative mx-auto flex min-h-[560px] max-w-6xl items-center px-8 py-12 lg:min-h-[640px] lg:px-12">
+          <div className="max-w-xl text-white">
+            <h1 className="text-4xl font-extrabold leading-tight lg:text-5xl">
               National Cooperative Management &amp; Governance System
             </h1>
             <p className="mt-4 text-lg text-gray-100">
@@ -196,7 +202,7 @@ export default function LandingPage() {
               membership records, field operations, legal documents, and governance
               compliance, built for all 47 counties of Kenya.
             </p>
-            <div className="mt-6 flex gap-3">
+            <div className="mt-7 flex gap-3">
               <Link href="/member/register" className="rounded-md bg-kenya-red px-5 py-2.5 text-sm font-semibold text-white hover:bg-kenya-red/90">
                 Register as a Farmer
               </Link>
@@ -204,10 +210,6 @@ export default function LandingPage() {
                 Farmer Sign In
               </Link>
             </div>
-          </div>
-          <div className="flex justify-center lg:col-span-7 lg:justify-end">
-            {/* One photograph, shown no wider than 440px so it stays sharp. */}
-            <Photo id="farmers" priority sizes="(min-width:1024px) 440px, 440px" className="h-80 w-full max-w-[440px] rounded-lg lg:h-[500px]" />
           </div>
         </div>
       </section>
@@ -339,7 +341,7 @@ export default function LandingPage() {
           </Link>
         </p>
         <p className="mt-2">
-          Coat of arms and county map via Wikimedia Commons (CC BY-SA).
+          Coat of arms and county map via Wikimedia Commons (CC BY-SA). Hero photograph: Wikimedia Commons, see its <a href={HERO_FILE_PAGE} className="underline" target="_blank" rel="noopener noreferrer">file page</a> for author and licence.
         </p>
         <p className="mt-1">© {new Date().getFullYear()} Republic of Kenya — Pilot deployment for demonstration purposes.</p>
       </footer>

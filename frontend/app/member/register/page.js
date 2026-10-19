@@ -7,7 +7,7 @@ import memberApi from "../../../lib/memberApi";
 
 export default function MemberRegisterPage() {
   const { register } = useMemberAuth();
-  const { counties, loading: countiesLoading, error: countiesError, retry: retryCounties } = useCounties();
+  const { counties, loading: countiesLoading, error: countiesError, retry: retryCounties, waking: countiesWaking } = useCounties();
   const [cooperatives, setCooperatives] = useState([]);
   const [form, setForm] = useState({
     countyId: "",
@@ -67,6 +67,7 @@ export default function MemberRegisterPage() {
             loading={countiesLoading}
             error={countiesError}
             retry={retryCounties}
+            waking={countiesWaking}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-kenya-green focus:outline-none disabled:bg-gray-50"
           />
 

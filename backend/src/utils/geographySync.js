@@ -19,15 +19,18 @@
  */
 const { SUB_COUNTIES, WARDS, ADMIN_SUB_COUNTIES } = require("../data/kenyaGeography");
 
-// Create a row unless another process (start-up sync vs. the first dropdown
-// request) created it a moment earlier; then just use that one.
-async function createOnce(delegate, data) {
-  try {
-    return { row: await delegate.create({ data }), created: true };
-  } catch (e) {
-    if (e && e.code === "P2002") return { row: await delegate.findUnique({ where: { code: data.code } }), created: false };
-    throw e;
+// Rows are created in a few batches (createMany + skipDuplicates) instead of
+// one round trip per row. On a small hosted database a round trip costs tens
+// of milliseconds, so ~1,500 one-at-a-time inserts could take minutes and
+// starve the requests (like the county dropdown) waiting behind them.
+const CHUNK = 500;
+async function createInChunks(delegate, rows) {
+  let n = 0;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const res = await delegate.createMany({ data: rows.slice(i, i + CHUNK), skipDuplicates: true });
+    n += res && typeof res.count === "number" ? res.count : 0;
   }
+  return n;
 }
 
 async function syncReference(prisma) {
@@ -35,31 +38,33 @@ async function syncReference(prisma) {
   const counties = await prisma.county.findMany();
   const countyIdByCode = new Map(counties.map((c) => [Number(c.code), c.id]));
 
-  const subs = await prisma.subCounty.findMany();
-  const subByCode = new Map(subs.map((s) => [s.code, s]));
-  for (const [code, countyCode, name] of SUB_COUNTIES) {
-    if (subByCode.has(code)) continue;
-    const countyId = countyIdByCode.get(countyCode);
-    if (!countyId) continue; // county not loaded yet; the next run picks it up
-    const { row, created } = await createOnce(prisma.subCounty, { code, name, countyId });
-    subByCode.set(code, row);
-    if (created) result.subsAdded++;
+  let subs = await prisma.subCounty.findMany();
+  let subByCode = new Map(subs.map((s) => [s.code, s]));
+  const missingSubs = SUB_COUNTIES
+    .filter(([code, countyCode]) => !subByCode.has(code) && countyIdByCode.has(countyCode)) // county not loaded yet: next run
+    .map(([code, countyCode, name]) => ({ code, name, countyId: countyIdByCode.get(countyCode) }));
+  if (missingSubs.length) {
+    result.subsAdded = await createInChunks(prisma.subCounty, missingSubs);
+    subs = await prisma.subCounty.findMany();
+    subByCode = new Map(subs.map((s) => [s.code, s]));
   }
   const subByIdName = new Map([...subByCode.values()].map((s) => [s.id, s.name]));
 
   const wards = await prisma.ward.findMany();
   const wardByCode = new Map(wards.map((w) => [w.code, w]));
+  const missingWards = [];
   for (const [code, subCode, name] of WARDS) {
     const sub = subByCode.get(subCode);
     if (!sub) continue;
     const existing = wardByCode.get(code);
     if (!existing) {
-      if ((await createOnce(prisma.ward, { code, name, subCountyId: sub.id })).created) result.wardsAdded++;
+      missingWards.push({ code, name, subCountyId: sub.id });
     } else if (existing.subCountyId !== sub.id) {
       await prisma.ward.update({ where: { id: existing.id }, data: { subCountyId: sub.id } });
       result.wardsMoved.push({ ward: existing.name, from: subByIdName.get(existing.subCountyId) || "?", to: sub.name });
     }
   }
+  if (missingWards.length) result.wardsAdded = await createInChunks(prisma.ward, missingWards);
   return result;
 }
 

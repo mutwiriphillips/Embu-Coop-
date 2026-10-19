@@ -9,42 +9,71 @@ import { resolveApiBaseUrl } from "./apiBaseUrl";
 // in localStorage from ever turning this public request into a redirect.
 const publicApi = axios.create({ baseURL: resolveApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) });
 
-// Every registration form used to load counties with `.catch(() => {})`, so
-// any failure (backend asleep on Render's free tier, a network error, an
-// empty table) rendered as a silently empty dropdown with no explanation.
-// This hook surfaces loading and error states and offers a retry instead.
+const CACHE_KEY = "embu_counties_v1";
+const readCache = () => {
+  try {
+    const list = JSON.parse(window.localStorage.getItem(CACHE_KEY) || "null");
+    return Array.isArray(list) && list.length >= 47 ? list : null;
+  } catch { return null; }
+};
+const writeCache = (list) => { try { window.localStorage.setItem(CACHE_KEY, JSON.stringify(list)); } catch { /* storage blocked: fine */ } };
+
+/**
+ * Fetches the county list once and remembers it in this browser (the 47
+ * counties don't change), so the dropdown is instant on every later visit.
+ * On Render's free tier the server sleeps when idle and takes up to a minute
+ * to wake, so a failed or slow attempt is retried a few times with a plain
+ * "waking up" message rather than failing at the first timeout.
+ */
+export async function fetchCountiesWithRetry({ attempts = 4, timeoutMs = 25000, onWaiting } = {}) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await publicApi.get("/counties", { timeout: timeoutMs });
+      const list = Array.isArray(res.data) ? res.data : [];
+      if (list.length) { writeCache(list); return list; }
+      lastErr = new Error("empty");
+    } catch (err) {
+      lastErr = err;
+      // A definite answer from the server (404, 500...) is not a sleeping server.
+      if (err?.response && err.response.status < 500) break;
+    }
+    if (i < attempts - 1) { if (onWaiting) onWaiting(i + 1); await new Promise((r) => setTimeout(r, 2000)); }
+  }
+  throw lastErr;
+}
+
 export function useCounties() {
   const [counties, setCounties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [waking, setWaking] = useState(false);
 
   const load = useCallback(() => {
-    setLoading(true);
+    const cached = readCache();
+    if (cached) { setCounties(cached); setLoading(false); } else setLoading(true);
     setError("");
-    publicApi
-      .get("/counties")
-      .then((res) => {
-        const list = Array.isArray(res.data) ? res.data : [];
-        setCounties(list);
-        if (list.length === 0) setError("The county list came back empty. Please try again in a moment.");
-      })
+    setWaking(false);
+    fetchCountiesWithRetry({ onWaiting: () => setWaking(true) })
+      .then((list) => { setCounties(list); setError(""); })
       .catch((err) => {
+        if (cached) return; // the saved list is still good; stay quiet
         setError(
           err?.response
             ? `Could not load counties (server responded ${err.response.status}).`
-            : "Could not reach the server to load counties. If the service was idle it may take up to a minute to wake — please retry."
+            : "Could not reach the server to load counties. It may still be waking up: please retry in a moment."
         );
       })
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); setWaking(false); });
   }, []);
 
   useEffect(load, [load]);
 
-  return { counties, loading, error, retry: load };
+  return { counties, loading, error, waking, retry: load };
 }
 
 // Drop-in <select> used by all three registration forms.
-export function CountySelect({ value, onChange, counties, loading, error, retry, className }) {
+export function CountySelect({ value, onChange, counties, loading, error, retry, className, waking }) {
   return (
     <div>
       <select
@@ -55,7 +84,7 @@ export function CountySelect({ value, onChange, counties, loading, error, retry,
         className={className}
       >
         <option value="">
-          {loading ? "Loading counties…" : counties.length ? `Select county (${counties.length})…` : "No counties loaded"}
+          {loading ? (waking ? "Waking the server… (up to a minute)" : "Loading counties…") : counties.length ? `Select county (${counties.length})…` : "No counties loaded"}
         </option>
         {counties.map((c) => (
           <option key={c.id} value={c.id}>{c.name}</option>

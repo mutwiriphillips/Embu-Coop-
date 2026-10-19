@@ -9,7 +9,7 @@ import { ACCEPT, HINT } from "../../../lib/files";
 
 export default function AgrovetApplyPage() {
   const { apply } = useAgrovetAuth();
-  const { counties, loading: countiesLoading, error: countiesError, retry: retryCounties } = useCounties();
+  const { counties, loading: countiesLoading, error: countiesError, retry: retryCounties, waking: countiesWaking } = useCounties();
   const [form, setForm] = useState({
     shopName: "",
     ownerName: "",
@@ -86,6 +86,7 @@ export default function AgrovetApplyPage() {
                 loading={countiesLoading}
                 error={countiesError}
                 retry={retryCounties}
+            waking={countiesWaking}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-kenya-green focus:outline-none disabled:bg-gray-50"
               />
           </div>

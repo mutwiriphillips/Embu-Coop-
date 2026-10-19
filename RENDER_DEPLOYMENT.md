@@ -398,3 +398,8 @@ Not covered: anything entered after the last backup. That is why the nightly cop
 - **Signing secret.** In production the server refuses to start unless `JWT_SECRET` is at least 32 characters (Render's generated value is).
 - **Build.** The backend build uses `npm install --omit=optional` (drops install-time packages with advisories that the app does not need).
 - The repository must be **private**; enable GitHub secret scanning and push protection.
+
+## Slow or empty county list (free tier)
+- First suspect: the free backend was asleep (about a minute to wake). The site now wakes it from the landing page, retries the county request four times with a "waking the server" message, and remembers the list in the browser. Optional: enable `.github/workflows/keep-awake.yml` (set the repository variable `BACKEND_HEALTH_URL`) to ping the backend every 10 minutes. Free hours are about 750 per workspace, so keep only the backend awake.
+- Start-up and the first county request used to insert counties and ~1,500 wards one row at a time. They are now batched, and the county list is cached in memory for 10 minutes.
+- If it is still slow, open the backend's Render logs: a line `[counties] slow county load: N ms` means the database itself is slow (free Postgres is small and far away); check that the backend and database are in the **same region** and that `DATABASE_URL` is the *Internal* URL.
