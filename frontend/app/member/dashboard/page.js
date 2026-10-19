@@ -31,7 +31,10 @@ export default function MemberDashboardPage() {
             <p className="text-sm font-bold text-kenya-black">{summary?.cooperative?.name || "My Cooperative"}</p>
             <p className="text-xs text-gray-500">{member?.legalName}</p>
           </div>
-          <button onClick={logout} className="text-xs font-medium text-kenya-red hover:underline">Sign out</button>
+          <div className="flex items-center gap-4">
+            <a href="/member/password" className="text-xs font-medium text-kenya-green hover:underline">Change password</a>
+            <button onClick={logout} className="text-xs font-medium text-kenya-red hover:underline">Sign out</button>
+          </div>
         </header>
 
         <div className="mx-auto max-w-4xl px-6 py-6">

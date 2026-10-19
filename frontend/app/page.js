@@ -4,18 +4,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../context/AuthContext";
+import Photo from "../components/Photo";
 
-// Real, freely-licensed photography (Wikimedia Commons, CC-BY-SA) — no
-// AI-generated images and no depictions of real identifiable individuals.
-//
-// Each picture is looked for first in this site's own /public/images folder
+// The five farm photographs live in components/Photo.js. The coat of arms and
+// the county map below are looked for first in this site's own /public/images folder
 // (self-hosted: faster, private to visitors, and required for a .go.ke
 // launch), then falls back to Wikimedia. Wikimedia only serves its standard
 // thumbnail widths (…, 120, 250, 330, 500, 960, 1280, 1920); any other width,
 // such as the 1600/140/700 used before, is refused and the browser shows only
 // the alt text. If neither source loads, a plain coloured block is shown so the
 // page stays readable.
-const HERO_IMG = { local: "/images/tea-farms.jpg", remote: "https://commons.wikimedia.org/wiki/Special:FilePath/Cycling_in_the_Eden_tea_farms.jpg?width=1280" };
 const COAT_OF_ARMS_IMG = { local: "/images/coat-of-arms.svg", remote: "https://commons.wikimedia.org/wiki/Special:FilePath/Coat_of_arms_of_Kenya.svg?width=250" };
 const COUNTY_MAP_IMG = { local: "/images/county-map.svg", remote: "https://commons.wikimedia.org/wiki/Special:FilePath/Kenya_county_map_labelled_with_names.svg?width=960" };
 
@@ -36,6 +34,7 @@ function SiteImage({ image, alt, className, fallbackClassName }) {
 const PORTALS = [
   {
     key: "farmer",
+    photo: "coffee",
     title: "Farmers",
     body: "See your contributions, deliveries, payouts, and input credit.",
     signInWith: "National ID",
@@ -45,6 +44,7 @@ const PORTALS = [
   },
   {
     key: "cooperative",
+    photo: "dairy",
     title: "Cooperatives",
     body: "Run your society: members, produce, payouts, documents, and elections.",
     signInWith: "Email or registration number",
@@ -54,6 +54,7 @@ const PORTALS = [
   },
   {
     key: "agrovet",
+    photo: "feed",
     title: "Agrovet Shops",
     body: "Supply farmers against their input credit and track your reimbursements.",
     signInWith: "Owner's National ID",
@@ -63,12 +64,21 @@ const PORTALS = [
   },
   {
     key: "staff",
+    photo: "tea",
     title: "County Staff",
     body: "Directors, Sub-County Officers, and Field Officers.",
     signInWith: "Work email",
     signIn: "/login",
     accent: "border-t-kenya-black",
   },
+];
+
+const GALLERY = [
+  { id: "tea", title: "Tea", note: "Smallholder tea societies", cell: "col-span-1 aspect-[4/5] sm:col-span-2 lg:col-span-1", sizes: "(min-width:1024px) 215px, (min-width:640px) 31vw, 46vw" },
+  { id: "dairy", title: "Dairy", note: "Milk marketing and cooling", cell: "col-span-1 aspect-[4/5] sm:col-span-2 lg:col-span-1", sizes: "(min-width:1024px) 215px, (min-width:640px) 31vw, 46vw" },
+  { id: "poultry", title: "Poultry", note: "Layers, broilers and feed", cell: "col-span-1 aspect-[4/5] sm:col-span-2 lg:col-span-1", sizes: "(min-width:1024px) 215px, (min-width:640px) 31vw, 46vw" },
+  { id: "coffee", title: "Coffee", note: "Factories and growers", cell: "col-span-1 aspect-[4/5] sm:col-span-3 sm:aspect-[4/3] lg:col-span-1 lg:aspect-[4/5]", sizes: "(min-width:1024px) 215px, (min-width:640px) 47vw, 46vw" },
+  { id: "feed", title: "Farm inputs", note: "Agrovets and input credit", cell: "col-span-2 aspect-[16/9] sm:col-span-3 sm:aspect-[4/3] lg:col-span-1 lg:aspect-[4/5]", sizes: "(min-width:1024px) 215px, (min-width:640px) 47vw, 92vw" },
 ];
 
 const MODULES = [
@@ -141,7 +151,9 @@ export default function LandingPage() {
 
       {/* Mobile hero (stacked, no overlay) */}
       <section className="md:hidden">
-        <SiteImage image={HERO_IMG} alt="Tea farms in the Kenyan highlands" className="h-52 w-full object-cover" fallbackClassName="h-52 w-full bg-kenya-green" />
+        <div className="bg-kenya-black">
+          <Photo id="farmers" priority sizes="100vw" className="h-72 w-full" />
+        </div>
         <div className="bg-kenya-black px-5 py-7">
           <h1 className="text-2xl font-extrabold leading-tight text-white">
             National Cooperative Management &amp; Governance System
@@ -171,13 +183,12 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Desktop hero (image with text overlay) */}
-      <section className="relative hidden overflow-hidden md:block">
-        <SiteImage image={HERO_IMG} alt="Tea farms in the Kenyan highlands" className="h-[460px] w-full object-cover" fallbackClassName="h-[460px] w-full bg-kenya-black" />
-        <div className="absolute inset-0 bg-gradient-to-r from-kenya-black/85 via-kenya-black/50 to-transparent" />
-        <div className="absolute inset-0 flex items-center px-12">
-          <div className="max-w-xl text-white">
-            <h1 className="text-4xl font-extrabold leading-tight lg:text-5xl">
+      {/* Desktop hero: text on the left, one photograph of farmers at work on the
+          right (stacked under the text on tablets), shown no larger than its real size. */}
+      <section className="hidden bg-kenya-black md:block">
+        <div className="mx-auto grid max-w-6xl gap-8 px-8 py-10 lg:grid-cols-12 lg:items-center lg:px-12 lg:py-12">
+          <div className="text-white lg:col-span-5">
+            <h1 className="text-4xl font-extrabold leading-tight">
               National Cooperative Management &amp; Governance System
             </h1>
             <p className="mt-4 text-lg text-gray-100">
@@ -194,6 +205,10 @@ export default function LandingPage() {
               </Link>
             </div>
           </div>
+          <div className="flex justify-center lg:col-span-7 lg:justify-end">
+            {/* One photograph, shown no wider than 440px so it stays sharp. */}
+            <Photo id="farmers" priority sizes="(min-width:1024px) 440px, 440px" className="h-80 w-full max-w-[440px] rounded-lg lg:h-[500px]" />
+          </div>
         </div>
       </section>
 
@@ -206,24 +221,54 @@ export default function LandingPage() {
           <p className="mt-1 text-sm text-gray-600">Each portal has its own secure sign-in. Choose the one that fits you.</p>
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {PORTALS.map((p) => (
-              <div key={p.key} className={`flex flex-col rounded-xl border border-gray-200 border-t-4 ${p.accent} bg-white p-5 shadow-sm`}>
+              <div key={p.key} className={`flex flex-col overflow-hidden rounded-xl border border-gray-200 border-t-4 ${p.accent} bg-white shadow-sm`}>
+                {/* Hidden on phones, where the cards are full width and the
+                    source pictures would have to be stretched. */}
+                <Photo id={p.photo} sizes="(min-width:1024px) 270px, 45vw" className="hidden h-32 w-full sm:block" />
+                <div className="flex flex-1 flex-col p-5">
                 <h3 className="text-base font-bold text-kenya-black">{p.title}</h3>
                 <p className="mt-1 text-sm text-gray-600">{p.body}</p>
                 <p className="mt-2 text-xs text-gray-500">Sign in with: <span className="font-medium text-gray-700">{p.signInWith}</span></p>
+                {/* Same height on every card, so the Sign in buttons line up. */}
                 <div className="mt-4 flex flex-col gap-2 pt-1 sm:mt-auto">
                   <Link href={p.signIn} className="rounded-md bg-kenya-green px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-kenya-green/90">
                     Sign in
                   </Link>
-                  {p.secondary && (
-                    <Link href={p.secondary.href} className="rounded-md border border-kenya-green px-4 py-2.5 text-center text-sm font-semibold text-kenya-green hover:bg-kenya-green/5">
-                      {p.secondary.label}
-                    </Link>
-                  )}
-                  {p.note && <p className="text-center text-xs text-gray-400">{p.note}</p>}
+                  <div className="flex min-h-[44px] flex-col justify-start gap-2">
+                    {p.secondary && (
+                      <Link href={p.secondary.href} className="rounded-md border border-kenya-green px-4 py-2.5 text-center text-sm font-semibold text-kenya-green hover:bg-kenya-green/5">
+                        {p.secondary.label}
+                      </Link>
+                    )}
+                    {p.note && <p className="text-center text-xs text-gray-400">{p.note}</p>}
+                  </div>
+                </div>
                 </div>
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Value chains: five equal, aligned tiles. 2 columns on phones (the
+          last tile spans both), 3 + 2 on tablets, one row of 5 on laptops. */}
+      <section className="px-5 py-12 sm:px-6 md:px-12 md:py-16">
+        <div className="mx-auto max-w-6xl">
+          <h2 className="text-xl font-bold text-kenya-black sm:text-2xl">Every value chain, one system</h2>
+          <p className="mt-1 max-w-2xl text-sm text-gray-600">
+            From tea and coffee to dairy, poultry and the agrovets that supply inputs: one registry and one set of rules for the whole co-operative movement.
+          </p>
+          <ul className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-6 md:gap-4 lg:grid-cols-5">
+            {GALLERY.map((g) => (
+              <li key={g.id} className={`relative overflow-hidden rounded-xl bg-gray-100 shadow-sm ${g.cell}`}>
+                <Photo id={g.id} sizes={g.sizes} className="absolute inset-0 h-full w-full" />
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-kenya-black/80 via-kenya-black/40 to-transparent px-3 pb-3 pt-10">
+                  <p className="text-sm font-bold text-white">{g.title}</p>
+                  <p className="text-xs text-gray-200">{g.note}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
@@ -294,8 +339,7 @@ export default function LandingPage() {
           </Link>
         </p>
         <p className="mt-2">
-          Photography: tea highlands, national flag, and county map via Wikimedia
-          Commons (CC BY-SA).
+          Coat of arms and county map via Wikimedia Commons (CC BY-SA).
         </p>
         <p className="mt-1">© {new Date().getFullYear()} Republic of Kenya — Pilot deployment for demonstration purposes.</p>
       </footer>

@@ -27,6 +27,22 @@ export function AuthProvider({ children }) {
   const login = useCallback(
     async (email, password) => {
       const { data } = await api.post("/auth/login", { email, password });
+      // Two-step sign-in: the password was right; the page now asks for the code.
+      if (data.mfaRequired) return { mfaRequired: true, mfaToken: data.mfaToken };
+      window.localStorage.setItem("embu_token", data.token);
+      window.localStorage.setItem("embu_user", JSON.stringify(data.user));
+      setSessionPortal("staff");
+      setUser(data.user);
+      router.push("/dashboard");
+      return { mfaRequired: false };
+    },
+    [router]
+  );
+
+  // Second step of a two-step sign-in: an authenticator code or a recovery code.
+  const verifyMfa = useCallback(
+    async (mfaToken, { code, recoveryCode }) => {
+      const { data } = await api.post("/auth/mfa/verify", { mfaToken, code, recoveryCode });
       window.localStorage.setItem("embu_token", data.token);
       window.localStorage.setItem("embu_user", JSON.stringify(data.user));
       setSessionPortal("staff");
@@ -67,7 +83,7 @@ export function AuthProvider({ children }) {
   }, [router]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, cooperativeLogin, logout, updateSession }}>
+    <AuthContext.Provider value={{ user, loading, login, verifyMfa, cooperativeLogin, logout, updateSession }}>
       {children}
     </AuthContext.Provider>
   );

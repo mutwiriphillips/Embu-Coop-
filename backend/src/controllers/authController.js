@@ -6,6 +6,7 @@ const { recordAudit } = require("../utils/audit");
 const { defaultPermissionsForRole } = require("../utils/rolePermissions");
 const { checkNewPassword, isKnownDefault, forceDefaultChange } = require("../utils/passwordPolicy");
 const { httpError } = require("../utils/geography");
+const { mfaSetupRequired } = require("../utils/mfa");
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -42,8 +43,9 @@ function signToken(user) {
 }
 
 function toPublicUser(user) {
-  const { passwordHash, ...safe } = user;
-  return safe;
+  // Never send credential material to the browser.
+  const { passwordHash, mfaSecret, mfaRecoveryHashes, mfaLastStep, ...safe } = user;
+  return { ...safe, mfaEnabled: Boolean(user.mfaEnabled), mfaSetupRequired: mfaSetupRequired(user) };
 }
 
 async function login(req, res) {
@@ -73,6 +75,13 @@ async function login(req, res) {
   }
 
   await flagDefaultPassword(user, password);
+
+  // Two-step sign-in: the password alone does not open a session.
+  if (user.mfaEnabled && user.mfaSecret) {
+    const { signMfaToken } = require("./mfaController");
+    return res.json({ mfaRequired: true, mfaToken: signMfaToken(user) });
+  }
+
   const token = signToken(user);
   await recordAudit({ userId: user.id, action: "LOGIN", entityType: "User", entityId: user.id });
 

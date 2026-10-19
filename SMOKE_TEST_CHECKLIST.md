@@ -15,7 +15,7 @@ Fill in your real URLs once, here, then use them for every step:
 - Backend URL: `_______________________________`
 - Frontend URL: `_______________________________`
 
-All seeded accounts share the password `Pilot2026!` unless noted. **Every first sign-in with it now forces a password change** (you land on Change password); choose a new one, then continue. Staff passwords need 10+ characters with letters and numbers.
+All seeded accounts share the password `Pilot2026!` unless noted. **Every first sign-in with it now forces a password change** (you land on Change password); choose a new one, then continue. Passwords need 10+ characters with letters and numbers. **National Admin and Director are then sent to *Security* to set up two-step sign-in** (authenticator app; save the recovery codes) before anything else works.
 
 ---
 
@@ -131,7 +131,8 @@ As Director or National Admin:
 
 ## Phase 8 — Farmer / Member Portal (10 minutes)
 
-- [ ] `/member/login` with National ID `PILOT-0001` and password `Pilot2026!` logs in successfully
+- [ ] `/member/login` with National ID `PILOT-0001` and password `Pilot2026!` is sent to **Change password**; the published password is refused as the new one; after choosing your own, the dashboard opens
+- [ ] Staff: *Cooperative → Members → Reset password* shows a one-time temporary password; the farmer's old password stops working; the temporary one forces a change
 - [ ] Overview tab shows non-zero totals matching what Phase 3 recorded
 - [ ] Cooperative's credit band from Phase 4 is visible here too
 - [ ] Contributions tab: make a (simulated) digital contribution — confirm it's clearly labeled as simulated, not implying a real M-Pesa charge happened
@@ -145,7 +146,7 @@ As Director or National Admin:
       all 47 counties, and shows a visible error with a Retry button (not a
       blank list) if the backend is unreachable
 - [ ] `/agrovet/login` with National ID `AGRO-0001` and password `Pilot2026!`
-      logs in and shows **Runyenjes Agrovet Supplies (Pilot)** as **Approved**
+      is sent to Change password first; after that it shows **Runyenjes Agrovet Supplies (Pilot)** as **Approved**
 - [ ] My Catalog lists the 6 seeded products
 - [ ] Record Collection: look up `PILOT-0001`, select the "Embu County Input
       Subsidy (Pilot)" credit (KES 10,000 remaining), add 2 × DAP (KES 5,000),

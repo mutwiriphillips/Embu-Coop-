@@ -24,6 +24,13 @@ api.interceptors.response.use(
       } catch {}
       if (window.location.pathname !== "/account/password") window.location.href = "/account/password";
     }
+    if (typeof window !== "undefined" && err?.response?.status === 403 && err.response.data?.code === "MFA_SETUP_REQUIRED") {
+      try {
+        const u = JSON.parse(window.localStorage.getItem("embu_user") || "null");
+        if (u) window.localStorage.setItem("embu_user", JSON.stringify({ ...u, mfaSetupRequired: true }));
+      } catch {}
+      if (window.location.pathname !== "/account/security") window.location.href = "/account/security";
+    }
     if (typeof window !== "undefined" && err?.response?.status === 401) {
       // Send the user back to the door they came in through: the
       // Cooperative Portal for managers, the staff login for everyone else.

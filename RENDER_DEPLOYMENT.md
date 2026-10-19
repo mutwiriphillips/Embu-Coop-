@@ -71,12 +71,29 @@ It looks up every record first and only creates what's missing. It never
 updates, deletes, or resets anything, so running it twice changes nothing
 the second time.
 
-**Schema changes on a live database:** the Render build command already runs
-`prisma db push --accept-data-loss` on every deploy. For additive changes
-(new tables, new optional fields), such as the Asset and Agrovet modules,
-that applies them without touching existing rows. Before deploying a change
-that *removes* or *renames* a column, take a database backup first, because
-that is the case where `--accept-data-loss` genuinely drops data.
+**Schema changes on a live database:** the Render build runs
+`prisma db push` (no `--accept-data-loss`). Additive changes (new tables, new
+optional columns, new columns with a default) apply without touching rows.
+If a change would drop or rewrite data, Prisma refuses and the **build fails
+instead of silently deleting**; the old version keeps running. Then: take a
+backup, and apply that change deliberately (see below).
+
+**Moving to reviewed migrations before go-live (one-time, needs internet on your laptop):**
+Prisma's migration engine could not be downloaded in the environment this was built in,
+so the baseline SQL was NOT generated here (hand-writing it would be unverified).
+Do this once on a machine with normal internet access:
+```bash
+cd backend && npm install
+mkdir -p prisma/migrations/0_baseline
+npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/0_baseline/migration.sql
+printf 'provider = "postgresql"\n' > prisma/migrations/migration_lock.toml
+# Tell the LIVE database the baseline is already applied (does not run the SQL):
+DATABASE_URL="<live external url>" npx prisma migrate resolve --applied 0_baseline
+```
+Commit `prisma/migrations/`, then change the Render build command to
+`npm install --omit=optional && npx prisma generate && npx prisma migrate deploy`.
+From then on, schema changes are made with `npx prisma migrate dev --name what_changed`
+locally, reviewed in the pull request as plain SQL, and applied by `migrate deploy`.
 
 **Fresh, empty test database only:**
 ```bash
@@ -374,6 +391,8 @@ Not covered: anything entered after the last backup. That is why the nightly cop
 ## Security hardening (read with SECURITY_ASSESSMENT.md)
 
 - **Passwords.** Any sign-in with the published test password `Pilot2026!` forces an immediate password change (`FORCE_DEFAULT_PASSWORD_CHANGE`, default on). Passwords need 10+ characters with letters and numbers. A Director or National Admin can issue a temporary password from *Staff & Access → Reset password*; the person must replace it at next sign-in.
+- **Two-step sign-in (MFA).** National Admin and Director must use an authenticator app (`MFA_REQUIRED_ROLES`, default `NATIONAL_ADMIN,DIRECTOR`). At their next sign-in they are taken to *Security* to scan a QR code and save 8 recovery codes. Lost phone and codes: another National Admin uses *Staff & Access → Reset 2-step*, or run `npm run reset:mfa -- <email>` in the Render shell. `MFA_ENFORCEMENT=false` is an emergency switch only. Optional `MFA_ENCRYPTION_KEY` (32+ random characters) encrypts the stored secrets with its own key; if you set it, never lose it, or everyone must re-enrol.
+- **Farmers and agrovets.** Both portals have *Change password*. A sign-in with `Pilot2026!` forces a change. A forgotten password is reset by staff: *Cooperative → Members → Reset password* (cooperative manager, field officer, sub-county officer, director, national admin within their area) or *Agrovets → Reset password* (sub-county officer, director, national admin). A one-time temporary password is shown; read it to the person in person. There is **no** self-service "forgot password" yet: that needs an SMS or email provider.
 - **Open sign-up must stay off.** `ALLOW_OPEN_SIGNUP` = `false` on the backend service. Check it in the Render dashboard, not only in `render.yaml`.
 - **Proxy setting.** `TRUST_PROXY_HOPS` = `1` on Render (default). Without it the sign-in limits cannot tell visitors apart.
 - **Signing secret.** In production the server refuses to start unless `JWT_SECRET` is at least 32 characters (Render's generated value is).

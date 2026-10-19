@@ -3,6 +3,8 @@ const jwt = require("jsonwebtoken");
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
+const { checkNewPassword } = require("../utils/passwordPolicy");
+const { flagDefaultPassword, changeOwnPassword } = require("../utils/accountPassword");
 const { resolveLocation, httpError } = require("../utils/geography");
 const { saveFile, assertValidFile } = require("../utils/fileStorage");
 
@@ -24,7 +26,7 @@ const applySchema = z.object({
   wardId: z.string().uuid(),
   subCounty: z.string().optional(),
   reimbursementMsisdn: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
-  password: z.string().min(8),
+  password: z.string().min(1),
 });
 
 const loginSchema = z.object({
@@ -49,7 +51,7 @@ function toPublicShop(shop, account) {
     status: shop.status,
     rejectionNote: shop.rejectionNote || undefined,
     county: shop.county ? { id: shop.county.id, name: shop.county.name } : undefined,
-    account: { id: account.id, phoneNumber: account.phoneNumber, email: account.email },
+    account: { id: account.id, phoneNumber: account.phoneNumber, email: account.email, mustChangePassword: Boolean(account.mustChangePassword) },
   };
 }
 
@@ -71,7 +73,9 @@ async function apply(req, res) {
   assertValidFile(shopPhoto, "AGROVET_SHOP_PHOTO");
   assertValidFile(permit, "AGROVET_PERMIT");
 
-  const passwordHash = await bcrypt.hash(data.password, 10);
+  const problem = checkNewPassword(data.password, { email: data.email });
+  if (problem) throw httpError(400, `Password: ${problem}`);
+  const passwordHash = await bcrypt.hash(data.password, 12);
 
   const shop = await prisma.agrovetShop.create({
     data: {
@@ -128,6 +132,7 @@ async function login(req, res) {
   }
 
   await prisma.agrovetAccount.update({ where: { id: account.id }, data: { lastLoginAt: new Date() } });
+  await flagDefaultPassword("agrovetAccount", account, password);
 
   const token = signAgrovetToken(account);
   res.json({ token, shop: toPublicShop(account.agrovetShop, account) });
@@ -154,4 +159,10 @@ async function uploadOwnFile(req, res) {
   res.status(201).json(saved);
 }
 
-module.exports = { apply, login, me, toPublicShop, uploadOwnFile };
+// POST /api/agrovet-auth/change-password
+async function changePassword(req, res) {
+  const updated = await changeOwnPassword("agrovetAccount", req.agrovetAccount, req.body || {}, "AGROVET_PASSWORD_CHANGED");
+  res.json({ token: signAgrovetToken(updated), shop: toPublicShop(req.agrovetShop, updated) });
+}
+
+module.exports = { apply, login, me, changePassword, toPublicShop, uploadOwnFile };

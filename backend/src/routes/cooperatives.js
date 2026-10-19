@@ -34,6 +34,7 @@ router.post("/:id/imports/parse", requireCooperativeAccess(), upload.single("fil
 router.post("/:id/members/bulk", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.addMembersBulk);
 router.post("/:id/members", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.addMember);
 router.patch("/:id/members/:memberId", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.updateMember);
+router.post("/:id/members/:memberId/reset-password", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.resetMemberPassword);
 router.delete("/:id/members/:memberId", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.removeMember);
 
 module.exports = router;

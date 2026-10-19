@@ -29,6 +29,16 @@ export default function AgrovetsPage() {
   const [area, setArea] = useState({ subCountyId: "", wardId: "" });
   const [reg, setReg] = useState(EMPTY);
   const [counties, setCounties] = useState([]);
+  const [issued, setIssued] = useState(null);
+
+  async function resetPassword(s) {
+    if (!window.confirm(`Reset the portal password for ${s.name}? Their current password stops working.`)) return;
+    setError(""); setIssued(null);
+    try {
+      const { data } = await api.post(`/agrovets/${s.id}/reset-password`);
+      setIssued({ name: s.name, password: data.temporaryPassword });
+    } catch (err) { setError(err?.response?.data?.error || "Could not reset the password."); }
+  }
 
   function load() {
     api
@@ -189,6 +199,13 @@ export default function AgrovetsPage() {
       </div>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {issued && (
+        <div className="mb-3 rounded-md border border-kenya-gold/50 bg-kenya-gold/10 p-3 text-sm">
+          <p>Temporary password for <strong>{issued.name}</strong>: <span className="select-all font-mono text-base font-semibold">{issued.password}</span></p>
+          <p className="mt-1 text-xs text-gray-600">Tell it to the owner in person. It is shown only now. They must choose their own password at next sign-in.</p>
+          <button onClick={() => setIssued(null)} className="mt-2 text-xs font-medium text-kenya-green hover:underline">Hide</button>
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
         <table className="w-full text-sm">
@@ -214,6 +231,9 @@ export default function AgrovetsPage() {
                 <td className="px-4 py-2 text-xs text-gray-500">{s.registeredBy ? s.registeredBy.fullName : "Applied online"}</td>
                 <td className="px-4 py-2 space-x-2">
                   <Link href={`/agrovets/${s.id}`} className="text-xs font-medium text-kenya-green hover:underline">View</Link>
+                  {["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"].includes(user.role) && (
+                    <button onClick={() => resetPassword(s)} className="text-xs font-medium text-kenya-green hover:underline">Reset password</button>
+                  )}
                   {s.status === "PENDING" && canReview && (
                     <>
                       <button onClick={() => review(s.id, true)} className="text-xs font-medium text-green-700 hover:underline">Mark Reviewed</button>

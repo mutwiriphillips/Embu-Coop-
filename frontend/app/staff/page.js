@@ -146,6 +146,18 @@ export default function StaffPage() {
     }
   }
 
+  async function resetMfa(s) {
+    if (!window.confirm(`Clear two-step sign-in for ${s.fullName}?\n\nUse this only if they have lost their phone and their recovery codes. They will have to set it up again, and any device they are signed in on will be signed out.`)) return;
+    setError(""); setNotice("");
+    try {
+      const { data } = await api.post(`/staff/${s.id}/reset-mfa`);
+      setNotice(data.message || "Two-step sign-in cleared.");
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to clear two-step sign-in");
+    }
+  }
+
   async function reactivate(s) {
     setError(""); setNotice("");
     try {
@@ -329,6 +341,9 @@ export default function StaffPage() {
                       )}
                       {s.active && s.id !== user.id && (user.role === "NATIONAL_ADMIN" || ((user.role === "DIRECTOR" || user.role === "SUBCOUNTY_OFFICER") && !["NATIONAL_ADMIN", "DIRECTOR"].includes(s.role) && !(user.role === "SUBCOUNTY_OFFICER" && s.role === "SUBCOUNTY_OFFICER"))) && (
                         <button onClick={() => resetPassword(s)} className="text-xs font-medium text-kenya-green hover:underline">Reset password</button>
+                      )}
+                      {s.active && s.mfaEnabled && s.id !== user.id && (user.role === "NATIONAL_ADMIN" || (["DIRECTOR", "SUBCOUNTY_OFFICER"].includes(user.role) && !["NATIONAL_ADMIN", "DIRECTOR"].includes(s.role) && !(user.role === "SUBCOUNTY_OFFICER" && s.role === "SUBCOUNTY_OFFICER"))) && (
+                        <button onClick={() => resetMfa(s)} className="text-xs font-medium text-kenya-green hover:underline">Reset 2-step</button>
                       )}
                       {s.active && s.id !== user.id && !(user.role === "DIRECTOR" && ["NATIONAL_ADMIN", "DIRECTOR"].includes(s.role)) && (
                         <button onClick={() => deactivate(s)} className="text-xs font-medium text-kenya-red hover:underline">Deactivate</button>

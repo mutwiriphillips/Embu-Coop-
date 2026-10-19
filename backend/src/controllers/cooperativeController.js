@@ -3,6 +3,7 @@ const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
 const { resolveLocation, areaScope, httpError, norm } = require("../utils/geography");
 const { assertBelongs } = require("../utils/ownership");
+const { resetToTemporary } = require("../utils/accountPassword");
 const { withLiveStatus } = require("../utils/governance");
 const { optionalDate, phoneSchema, nationalIdSchema } = require("../utils/validators");
 
@@ -241,8 +242,10 @@ async function listMembers(req, res) {
   const members = await prisma.member.findMany({
     where: { cooperativeId: req.params.id },
     orderBy: { legalName: "asc" },
+    include: { account: { select: { id: true } } },
   });
-  res.json(members);
+  // Only whether a portal account exists is sent, never anything from it.
+  res.json(members.map(({ account, ...m }) => ({ ...m, hasAccount: Boolean(account) })));
 }
 
 async function addMember(req, res) {
@@ -360,7 +363,23 @@ async function removeMember(req, res) {
   res.status(204).send();
 }
 
+// POST /api/cooperatives/:id/members/:memberId/reset-password
+// For a farmer who forgot their password (there is no SMS/email to send a link).
+// Staff in this cooperative's area set a one-time temporary password, read it to
+// the farmer in person, and the farmer must choose their own at next sign-in.
+async function resetMemberPassword(req, res) {
+  const member = await prisma.member.findUnique({
+    where: { id: req.params.memberId },
+    select: { id: true, cooperativeId: true, legalName: true, account: { select: { id: true } } },
+  });
+  assertBelongs(member, req.params.id, "Member");
+  if (!member.account) throw httpError(409, `${member.legalName} has not created a portal account yet, so there is no password to reset.`);
+  const temporaryPassword = await resetToTemporary("memberAccount", member.account.id, req.user.id, "RESET_MEMBER_PASSWORD");
+  res.json({ temporaryPassword, message: `Give this password to ${member.legalName} in person. It is shown only once, and they must choose their own at next sign-in.` });
+}
+
 module.exports = {
+  resetMemberPassword,
   addMembersBulk,
   VALUE_CHAINS,
   listCooperatives,

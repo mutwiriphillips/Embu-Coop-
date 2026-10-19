@@ -85,7 +85,7 @@ export default function MemberRegisterPage() {
           <input type="email" placeholder="Email (optional)" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
 
-          <input required type="password" placeholder="Create a password (min 8 characters)" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          <input required type="password" placeholder="Create a password (10+ characters, letters and numbers)" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
 
           {error && <p className="text-sm text-red-600">{error}</p>}

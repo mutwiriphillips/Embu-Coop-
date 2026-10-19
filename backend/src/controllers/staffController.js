@@ -297,6 +297,24 @@ async function resetPassword(req, res) {
   res.json({ ok: true, message: `${target.fullName} must choose a new password at next sign-in.` });
 }
 
+// POST /api/staff/:id/reset-mfa
+// For someone who lost their phone AND their recovery codes: clears their
+// two-step sign-in so they can set it up again at next sign-in (required roles
+// are forced to). Same seniority rule as password reset; the person's sessions end.
+async function resetMfa(req, res) {
+  const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
+  if (target.id === req.user.id) throw httpError(400, "You can't reset your own two-step sign-in. Use a recovery code, or ask a National Admin.");
+  if (req.user.role !== "NATIONAL_ADMIN" && !(RANK[req.user.role] < RANK[target.role])) {
+    throw httpError(403, "You can only reset two-step sign-in for staff who are junior to you");
+  }
+  await prisma.user.update({
+    where: { id: target.id },
+    data: { mfaEnabled: false, mfaSecret: null, mfaRecoveryHashes: null, mfaLastStep: null, passwordChangedAt: new Date() },
+  });
+  await recordAudit({ userId: req.user.id, action: "RESET_STAFF_MFA", entityType: "User", entityId: target.id });
+  res.json({ ok: true, message: `${target.fullName}'s two-step sign-in was cleared. They will set it up again at next sign-in.` });
+}
+
 async function reactivateStaff(req, res) {
   const target = req.targetStaff || (await prisma.user.findUnique({ where: { id: req.params.id } }));
   if (req.user.role === "DIRECTOR" && SENIOR_ROLES.includes(target.role)) {
@@ -364,6 +382,7 @@ module.exports = {
   deactivateStaff,
   reactivateStaff,
   resetPassword,
+  resetMfa,
   staffActivity,
   setPermission,
 };

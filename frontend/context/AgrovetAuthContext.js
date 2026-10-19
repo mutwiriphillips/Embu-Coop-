@@ -29,7 +29,7 @@ export function AgrovetAuthProvider({ children }) {
       window.localStorage.setItem("embu_agrovet_token", data.token);
       window.localStorage.setItem("embu_agrovet_profile", JSON.stringify(data.shop));
       setShop(data.shop);
-      router.push("/agrovet/dashboard");
+      router.push(data.shop?.account?.mustChangePassword ? "/agrovet/password" : "/agrovet/dashboard");
     },
     [router]
   );
@@ -47,6 +47,12 @@ export function AgrovetAuthProvider({ children }) {
     [router]
   );
 
+  const updateSession = useCallback((token, profile) => {
+    window.localStorage.setItem("embu_agrovet_token", token);
+    window.localStorage.setItem("embu_agrovet_profile", JSON.stringify(profile));
+    setShop(profile);
+  }, []);
+
   const logout = useCallback(() => {
     window.localStorage.removeItem("embu_agrovet_token");
     window.localStorage.removeItem("embu_agrovet_profile");
@@ -55,7 +61,7 @@ export function AgrovetAuthProvider({ children }) {
   }, [router]);
 
   return (
-    <AgrovetAuthContext.Provider value={{ shop, loading, login, apply, logout }}>
+    <AgrovetAuthContext.Provider value={{ shop, loading, login, apply, logout, updateSession }}>
       {children}
     </AgrovetAuthContext.Provider>
   );

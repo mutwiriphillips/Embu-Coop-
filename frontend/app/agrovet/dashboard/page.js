@@ -26,6 +26,11 @@ export default function AgrovetDashboardPage() {
     return null;
   }
 
+  if (shop.account?.mustChangePassword) {
+    if (typeof window !== "undefined") window.location.href = "/agrovet/password";
+    return null;
+  }
+
   const statusInfo = STATUS_COPY[shop.status] || STATUS_COPY.PENDING;
   const isApproved = shop.status === "APPROVED";
 
@@ -36,7 +41,10 @@ export default function AgrovetDashboardPage() {
           <h1 className="text-lg font-bold text-kenya-black">{shop.name}</h1>
           <p className="text-xs text-gray-500">{shop.county?.name} County</p>
         </div>
-        <button onClick={logout} className="text-sm text-gray-500 hover:underline">Sign out</button>
+        <div className="flex items-center gap-4">
+          <a href="/agrovet/password" className="text-sm text-kenya-green hover:underline">Change password</a>
+          <button onClick={logout} className="text-sm text-gray-500 hover:underline">Sign out</button>
+        </div>
       </header>
 
       <div className="mx-auto max-w-5xl px-6 py-6">

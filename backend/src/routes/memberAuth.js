@@ -1,6 +1,6 @@
 const express = require("express");
 const prisma = require("../config/db");
-const { register, login, me } = require("../controllers/memberAuthController");
+const { register, login, me, changePassword } = require("../controllers/memberAuthController");
 const { authenticateMember } = require("../middleware/auth");
 
 const router = express.Router();
@@ -8,6 +8,7 @@ const router = express.Router();
 router.post("/register", register);
 router.post("/login", login);
 router.get("/me", authenticateMember, me);
+router.post("/change-password", authenticateMember, changePassword);
 
 // Public — a would-be member isn't authenticated yet and needs to find
 // their cooperative to register. Name/id only, no membership or financial

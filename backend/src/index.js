@@ -62,9 +62,9 @@ app.use(
 // Sign-in brute-force protection: failed attempts per IP + account, and a
 // looser cap per IP to stop one address trying many accounts. Successful
 // sign-ins are not counted.
-const identifierOf = (req) => String((req.body && (req.body.email || req.body.identifier || req.body.nationalId)) || "").trim().toLowerCase().slice(0, 120);
+const identifierOf = (req) => String((req.body && (req.body.email || req.body.identifier || req.body.nationalId || (req.body.mfaToken ? "mfa:" + String(req.body.mfaToken).slice(-24) : ""))) || "").trim().toLowerCase().slice(0, 120);
 const tooMany = { error: "Too many sign-in attempts. Please wait 15 minutes and try again." };
-const LOGIN_PATHS = ["/api/auth/login", "/api/cooperative-auth/login", "/api/member-auth/login", "/api/agrovet-auth/login"];
+const LOGIN_PATHS = ["/api/auth/login", "/api/auth/mfa/verify", "/api/cooperative-auth/login", "/api/member-auth/login", "/api/agrovet-auth/login"];
 app.use(LOGIN_PATHS, rateLimit({
   windowMs: 15 * 60 * 1000, max: 8, skipSuccessfulRequests: true, standardHeaders: true, legacyHeaders: false,
   keyGenerator: (req) => `${req.ip}|${identifierOf(req)}`, message: tooMany,

@@ -4,20 +4,26 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "../../context/AuthContext";
 import { describeAuthError } from "../../lib/authErrors";
+import AuthShell from "../../components/AuthShell";
 
 export default function LoginPage() {
-  const { login, cooperativeLogin } = useAuth();
+  const { login, verifyMfa, cooperativeLogin } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Set after the password step when the account uses two-step sign-in.
+  const [mfaToken, setMfaToken] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [useRecovery, setUseRecovery] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     setSubmitting(true);
     try {
-      await login(email, password);
+      const r = await login(email, password);
+      if (r?.mfaRequired) { setMfaToken(r.mfaToken); setPassword(""); }
     } catch (err) {
       // A Cooperative Manager who signs in here out of habit: the server has
       // verified their password but won't issue a staff token. Hand the same
@@ -37,8 +43,22 @@ export default function LoginPage() {
     }
   }
 
+  async function handleMfa(e) {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      await verifyMfa(mfaToken, useRecovery ? { recoveryCode: mfaCode } : { code: mfaCode });
+    } catch (err) {
+      if (err?.response?.data?.code === "MFA_EXPIRED") { setMfaToken(""); setMfaCode(""); }
+      setError(describeAuthError(err, "That code is not right."));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-kenya-green/5 px-4">
+    <AuthShell photo="tea">
       <div className="w-full max-w-sm rounded-xl bg-white p-8 shadow-lg">
         <p className="text-xs font-bold uppercase tracking-wide text-kenya-gold">County Staff</p>
         <h1 className="mb-1 mt-1 text-xl font-bold text-kenya-black">Republic of Kenya</h1>
@@ -46,7 +66,34 @@ export default function LoginPage() {
           National Cooperative Management &amp; Governance System
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {mfaToken ? (
+          <form onSubmit={handleMfa} className="space-y-4">
+            <p className="text-sm text-gray-700">
+              {useRecovery ? "Enter one of your recovery codes." : "Open your authenticator app and enter the 6-digit code for this account."}
+            </p>
+            <input
+              autoFocus
+              required
+              inputMode={useRecovery ? "text" : "numeric"}
+              autoComplete="one-time-code"
+              maxLength={useRecovery ? 12 : 7}
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-center text-lg tracking-widest focus:border-kenya-green focus:outline-none"
+              placeholder={useRecovery ? "XXXXX-XXXXX" : "123 456"}
+            />
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <button type="submit" disabled={submitting} className="w-full rounded-md bg-kenya-green px-4 py-2 text-sm font-semibold text-white hover:bg-kenya-green/90 disabled:opacity-50">
+              {submitting ? "Checking…" : "Verify"}
+            </button>
+            <div className="flex justify-between text-xs">
+              <button type="button" onClick={() => { setUseRecovery(!useRecovery); setMfaCode(""); setError(""); }} className="font-medium text-kenya-green hover:underline">
+                {useRecovery ? "Use my authenticator app" : "Use a recovery code"}
+              </button>
+              <button type="button" onClick={() => { setMfaToken(""); setMfaCode(""); setError(""); setUseRecovery(false); }} className="text-gray-500 hover:underline">Start again</button>
+            </div>
+          </form>
+        ) : (        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium">Email</label>
             <input
@@ -80,6 +127,7 @@ export default function LoginPage() {
             {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
+        )}
 
         <div className="mt-4 border-t border-gray-100 pt-4 text-center text-xs text-gray-500">
           Not county staff?{" "}
@@ -90,6 +138,6 @@ export default function LoginPage() {
           <Link href="/agrovet/login" className="font-medium text-kenya-green hover:underline">Agrovet</Link>
         </div>
       </div>
-    </div>
+    </AuthShell>
   );
 }

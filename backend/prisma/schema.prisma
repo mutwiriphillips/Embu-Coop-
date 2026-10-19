@@ -68,6 +68,12 @@ model User {
   mustChangePassword Boolean      @default(false)
   // Tokens issued before this moment are rejected (password changed/reset).
   passwordChangedAt  DateTime?
+  // Two-step sign-in (authenticator app). Secret is stored encrypted and is
+  // never returned by the API.
+  mfaEnabled         Boolean   @default(false)
+  mfaSecret          String?
+  mfaRecoveryHashes  Json?
+  mfaLastStep        Int?
   permissions        Permission[]
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
@@ -365,6 +371,11 @@ model MemberAccount {
   passwordHash String
   active       Boolean   @default(true)
   lastLoginAt  DateTime?
+  // Set when the account signs in with the published test password or after a
+  // staff-assisted reset; the farmer must then choose their own password.
+  mustChangePassword Boolean   @default(false)
+  // Sessions issued before this moment stop working (password change/reset).
+  passwordChangedAt  DateTime?
   createdAt    DateTime  @default(now())
 }
 
@@ -760,6 +771,8 @@ model AgrovetAccount {
   passwordHash  String
   active        Boolean     @default(true)
   lastLoginAt   DateTime?
+  mustChangePassword Boolean   @default(false)
+  passwordChangedAt  DateTime?
   createdAt     DateTime    @default(now())
 
   collectionsRecorded InputCollection[]

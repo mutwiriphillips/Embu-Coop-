@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAgrovetAuth } from "../../../context/AgrovetAuthContext";
 import { describeAuthError } from "../../../lib/authErrors";
+import AuthShell from "../../../components/AuthShell";
 
 export default function AgrovetLoginPage() {
   const { login } = useAgrovetAuth();
@@ -25,7 +26,7 @@ export default function AgrovetLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-kenya-green/5 px-4">
+    <AuthShell photo="feed">
       <div className="w-full max-w-sm rounded-xl bg-white p-8 shadow-lg">
         <h1 className="mb-1 text-xl font-bold text-kenya-black">Agrovet Portal</h1>
         <p className="mb-6 text-sm text-gray-500">Sign in with your owner National ID.</p>
@@ -71,6 +72,6 @@ export default function AgrovetLoginPage() {
           County staff login
         </a>
       </div>
-    </div>
+    </AuthShell>
   );
 }

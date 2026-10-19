@@ -61,6 +61,7 @@ export default function Sidebar() {
         <p className="mb-2 text-xs text-gray-500">{user?.role?.replace(/_/g, " ")}</p>
         <div className="flex gap-4">
           <Link href="/account/password" className="text-xs font-medium text-kenya-green hover:underline">Change password</Link>
+          {!isManager && <Link href="/account/security" className="text-xs font-medium text-kenya-green hover:underline">Security</Link>}
           <button onClick={logout} className="text-xs font-medium text-kenya-red hover:underline">
             Sign out
           </button>

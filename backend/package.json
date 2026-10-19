@@ -20,6 +20,7 @@
     "geo:sync": "node prisma/sync-geography.js",
     "backup": "node prisma/backup.js",
     "restore": "node prisma/restore.js",
+    "reset:mfa": "node prisma/reset-mfa.js",
     "test:backup": "node src/utils/backup.test.js"
   },
   "prisma": {
@@ -38,6 +39,7 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "pdfjs-dist": "^3.11.174",
+    "qrcode-generator": "^1.4.4",
     "zod": "^3.23.8"
   },
   "devDependencies": {

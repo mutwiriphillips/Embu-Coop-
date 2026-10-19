@@ -3,13 +3,15 @@ const jwt = require("jsonwebtoken");
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
+const { checkNewPassword } = require("../utils/passwordPolicy");
+const { flagDefaultPassword, changeOwnPassword } = require("../utils/accountPassword");
 
 const registerSchema = z.object({
   cooperativeId: z.string().uuid(),
   nationalId: z.string().min(1),
   phoneNumber: z.string().min(1),
   email: z.string().email().optional(),
-  password: z.string().min(8),
+  password: z.string().min(1),
 });
 
 const loginSchema = z.object({
@@ -42,6 +44,7 @@ function toPublicMember(member, account) {
       id: account.id,
       phoneNumber: account.phoneNumber,
       email: account.email,
+      mustChangePassword: Boolean(account.mustChangePassword),
     },
   };
 }
@@ -81,6 +84,8 @@ async function register(req, res) {
     return res.status(409).json({ error: "An account already exists for this member. Please log in instead." });
   }
 
+  const problem = checkNewPassword(data.password);
+  if (problem) return res.status(400).json({ error: `Password: ${problem}` });
   const passwordHash = await bcrypt.hash(data.password, 12);
 
   const account = await prisma.memberAccount.create({
@@ -127,6 +132,7 @@ async function login(req, res) {
   }
 
   await prisma.memberAccount.update({ where: { id: account.id }, data: { lastLoginAt: new Date() } });
+  await flagDefaultPassword("memberAccount", account, password);
 
   const token = signMemberToken(account);
   res.json({ token, member: toPublicMember(account.member, account) });
@@ -136,4 +142,10 @@ async function me(req, res) {
   res.json({ member: toPublicMember(req.member, req.memberAccount) });
 }
 
-module.exports = { register, login, me, toPublicMember };
+// POST /api/member-auth/change-password
+async function changePassword(req, res) {
+  const updated = await changeOwnPassword("memberAccount", req.memberAccount, req.body || {}, "MEMBER_PASSWORD_CHANGED");
+  res.json({ token: signMemberToken(updated), member: toPublicMember(req.member, updated) });
+}
+
+module.exports = { register, login, me, changePassword, toPublicMember };

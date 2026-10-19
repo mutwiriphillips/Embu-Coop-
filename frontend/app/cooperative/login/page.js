@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "../../../context/AuthContext";
 import { describeAuthError } from "../../../lib/authErrors";
 import { resolveApiBaseUrl } from "../../../lib/apiBaseUrl";
+import AuthShell from "../../../components/AuthShell";
 
 // Public lookups go through a plain client with no session token attached.
 const publicApi = axios.create({ baseURL: resolveApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) });
@@ -69,7 +70,7 @@ export default function CooperativeLoginPage() {
   const isEmail = identifier.includes("@");
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-kenya-green/5 px-4 py-10">
+    <AuthShell photo="dairy">
       <div className="w-full max-w-sm rounded-xl bg-white p-8 shadow-lg">
         <p className="text-xs font-bold uppercase tracking-wide text-kenya-gold">Cooperative Portal</p>
         <h1 className="mb-1 mt-1 text-xl font-bold text-kenya-black">Sign in to your cooperative</h1>
@@ -152,6 +153,6 @@ export default function CooperativeLoginPage() {
           <Link href="/login" className="font-medium text-kenya-green hover:underline">County Staff</Link>
         </div>
       </div>
-    </div>
+    </AuthShell>
   );
 }

@@ -2,12 +2,19 @@ const jwt = require("jsonwebtoken");
 const prisma = require("../config/db");
 const { inArea } = require("../utils/geography");
 const { issuedBeforeChange } = require("../utils/passwordPolicy");
+const { mfaSetupRequired } = require("../utils/mfa");
 
 // Only HS256 is ever issued; refuse anything else (no "none"/algorithm switching).
 const JWT_OPTIONS = { algorithms: ["HS256"] };
 
+// Same idea for farmer and agrovet accounts.
+const MEMBER_ALLOWED_WHEN_PASSWORD_CHANGE_REQUIRED = new Set(["/api/member-auth/me", "/api/member-auth/change-password"]);
+const AGROVET_ALLOWED_WHEN_PASSWORD_CHANGE_REQUIRED = new Set(["/api/agrovet-auth/me", "/api/agrovet-auth/change-password"]);
+
 // While an account must change its password, only these calls work.
 const ALLOWED_WHEN_PASSWORD_CHANGE_REQUIRED = new Set(["/api/auth/me", "/api/auth/change-password", "/api/cooperative-auth/me"]);
+// While a role that must use two-step sign-in has not set it up, only these work.
+const ALLOWED_WHEN_MFA_SETUP_REQUIRED = new Set(["/api/auth/me", "/api/auth/change-password", "/api/auth/mfa/setup", "/api/auth/mfa/enable"]);
 
 /**
  * Verifies the JWT bearer token and attaches the authenticated user
@@ -58,6 +65,10 @@ async function authenticate(req, res, next) {
     }
     if (user.mustChangePassword && !ALLOWED_WHEN_PASSWORD_CHANGE_REQUIRED.has(`${req.baseUrl}${req.path}`)) {
       return res.status(403).json({ error: "You must change your password before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
+    }
+
+    if (mfaSetupRequired(user) && !ALLOWED_WHEN_MFA_SETUP_REQUIRED.has(`${req.baseUrl}${req.path}`)) {
+      return res.status(403).json({ error: "Set up two-step sign-in before continuing.", code: "MFA_SETUP_REQUIRED" });
     }
 
     req.user = user;
@@ -177,6 +188,12 @@ async function authenticateMember(req, res, next) {
     if (!account || !account.active) {
       return res.status(401).json({ error: "Account not found or deactivated" });
     }
+    if (issuedBeforeChange(payload.iat, account.passwordChangedAt)) {
+      return res.status(401).json({ error: "Your password was changed. Please sign in again." });
+    }
+    if (account.mustChangePassword && !MEMBER_ALLOWED_WHEN_PASSWORD_CHANGE_REQUIRED.has(`${req.baseUrl}${req.path}`)) {
+      return res.status(403).json({ error: "You must change your password before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
+    }
 
     req.memberAccount = account;
     req.member = account.member;
@@ -245,6 +262,12 @@ async function authenticateAgrovet(req, res, next) {
 
     if (!account || !account.active) {
       return res.status(401).json({ error: "Account not found or deactivated" });
+    }
+    if (issuedBeforeChange(payload.iat, account.passwordChangedAt)) {
+      return res.status(401).json({ error: "Your password was changed. Please sign in again." });
+    }
+    if (account.mustChangePassword && !AGROVET_ALLOWED_WHEN_PASSWORD_CHANGE_REQUIRED.has(`${req.baseUrl}${req.path}`)) {
+      return res.status(403).json({ error: "You must change your password before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
     }
 
     req.agrovetAccount = account;

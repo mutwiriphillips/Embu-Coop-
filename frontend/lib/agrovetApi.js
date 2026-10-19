@@ -20,6 +20,9 @@ agrovetApi.interceptors.request.use((config) => {
 agrovetApi.interceptors.response.use(
   (res) => res,
   (err) => {
+    if (typeof window !== "undefined" && err?.response?.status === 403 && err?.response?.data?.code === "PASSWORD_CHANGE_REQUIRED") {
+      if (window.location.pathname !== "/agrovet/password") window.location.href = "/agrovet/password";
+    }
     if (typeof window !== "undefined" && err?.response?.status === 401) {
       window.localStorage.removeItem("embu_agrovet_token");
       window.localStorage.removeItem("embu_agrovet_profile");

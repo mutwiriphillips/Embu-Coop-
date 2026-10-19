@@ -20,6 +20,9 @@ memberApi.interceptors.request.use((config) => {
 memberApi.interceptors.response.use(
   (res) => res,
   (err) => {
+    if (typeof window !== "undefined" && err?.response?.status === 403 && err?.response?.data?.code === "PASSWORD_CHANGE_REQUIRED") {
+      if (window.location.pathname !== "/member/password") window.location.href = "/member/password";
+    }
     if (typeof window !== "undefined" && err?.response?.status === 401) {
       window.localStorage.removeItem("embu_member_token");
       window.localStorage.removeItem("embu_member_profile");

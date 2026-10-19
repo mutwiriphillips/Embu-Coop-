@@ -1,6 +1,7 @@
 const express = require("express");
 const { login, me, signup, changePassword } = require("../controllers/authController");
 const { authenticate } = require("../middleware/auth");
+const mfa = require("../controllers/mfaController");
 const prisma = require("../config/db");
 
 const router = express.Router();
@@ -9,6 +10,12 @@ router.post("/login", login);
 router.post("/signup", signup); // gated internally by ALLOW_OPEN_SIGNUP
 router.get("/me", authenticate, me);
 router.post("/change-password", authenticate, changePassword);
+// Two-step sign-in (authenticator app)
+router.post("/mfa/verify", mfa.verifyLogin);
+router.post("/mfa/setup", authenticate, mfa.setup);
+router.post("/mfa/enable", authenticate, mfa.enable);
+router.post("/mfa/disable", authenticate, mfa.disable);
+router.post("/mfa/recovery-codes", authenticate, mfa.regenerateRecoveryCodes);
 
 // Public, minimal cooperative picker for the signup form (name/id only —
 // no member or financial data), scoped to a county the visitor selected.

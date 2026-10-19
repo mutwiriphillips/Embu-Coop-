@@ -4,6 +4,7 @@ const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
 const { resolveLocation, areaScope, httpError } = require("../utils/geography");
 const { saveFile, assertValidFile } = require("../utils/fileStorage");
+const { resetToTemporary } = require("../utils/accountPassword");
 
 // GET /agrovets?status=PENDING&countyId=.. — county-scoped for everyone
 // except NATIONAL_ADMIN, enforced at the route level via the user's own
@@ -186,7 +187,9 @@ async function registerAgrovet(req, res) {
           nationalId: data.ownerNationalId,
           phoneNumber: data.phoneNumber,
           email: data.email,
-          passwordHash: await bcrypt.hash(data.temporaryPassword, 10),
+          passwordHash: await bcrypt.hash(data.temporaryPassword, 12),
+          // The officer knows this password, so the owner must replace it at first sign-in.
+          mustChangePassword: true,
         },
       },
     },
@@ -217,4 +220,13 @@ async function uploadShopFile(req, res) {
   res.status(201).json(saved);
 }
 
-module.exports = { uploadShopFile, registerAgrovet, listAgrovets, getAgrovet, reviewAgrovet, approveAgrovet, suspendAgrovet };
+// POST /api/agrovets/:id/reset-password — see cooperativeController.resetMemberPassword.
+async function resetAgrovetPassword(req, res) {
+  const shop = req.targetAgrovetShop;
+  const account = await prisma.agrovetAccount.findUnique({ where: { agrovetShopId: shop.id }, select: { id: true } });
+  if (!account) throw httpError(409, `${shop.name} has no portal account, so there is no password to reset.`);
+  const temporaryPassword = await resetToTemporary("agrovetAccount", account.id, req.user.id, "RESET_AGROVET_PASSWORD");
+  res.json({ temporaryPassword, message: `Give this password to the owner of ${shop.name} in person. It is shown only once, and they must choose their own at next sign-in.` });
+}
+
+module.exports = { resetAgrovetPassword, uploadShopFile, registerAgrovet, listAgrovets, getAgrovet, reviewAgrovet, approveAgrovet, suspendAgrovet };

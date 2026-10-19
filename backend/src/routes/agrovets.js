@@ -17,6 +17,7 @@ router.post("/:id/files", requireAgrovetShopAccess(), requireRole("NATIONAL_ADMI
 router.get("/:id", requireAgrovetShopAccess(), shops.getAgrovet);
 router.post("/:id/review", requireAgrovetShopAccess(), requireRole("NATIONAL_ADMIN", "SUBCOUNTY_OFFICER", "DIRECTOR"), shops.reviewAgrovet);
 router.post("/:id/approve", requireAgrovetShopAccess(), requireRole("NATIONAL_ADMIN", "DIRECTOR"), shops.approveAgrovet);
+router.post("/:id/reset-password", requireAgrovetShopAccess(), requireRole("NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"), shops.resetAgrovetPassword);
 router.patch("/:id/suspend", requireAgrovetShopAccess(), requireRole("NATIONAL_ADMIN", "DIRECTOR"), shops.suspendAgrovet);
 
 router.get("/:id/collections", requireAgrovetShopAccess(), reimbursements.listShopCollectionsForStaff);

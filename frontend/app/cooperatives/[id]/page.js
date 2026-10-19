@@ -162,6 +162,16 @@ export default function CooperativeDetailPage() {
 function MembersTab({ coop, onChange }) {
   const [form, setForm] = useState({ legalName: "", nationalId: "", phoneNumber: "", gender: "MALE", shareCapital: 0 });
   const [error, setError] = useState("");
+  const [issued, setIssued] = useState(null); // { name, password } shown once
+
+  async function resetPassword(m) {
+    if (!window.confirm(`Reset ${m.legalName}'s portal password? Their current password stops working and any signed-in session ends.`)) return;
+    setError(""); setIssued(null);
+    try {
+      const { data } = await api.post(`/cooperatives/${coop.id}/members/${m.id}/reset-password`);
+      setIssued({ name: m.legalName, password: data.temporaryPassword });
+    } catch (err) { setError(err?.response?.data?.error || "Could not reset the password."); }
+  }
 
   async function addMember(e) {
     e.preventDefault();
@@ -197,8 +207,15 @@ function MembersTab({ coop, onChange }) {
         </button>
       </form>
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {issued && (
+        <div className="mb-3 rounded-md border border-kenya-gold/50 bg-kenya-gold/10 p-3 text-sm">
+          <p>Temporary password for <strong>{issued.name}</strong>: <span className="select-all font-mono text-base font-semibold">{issued.password}</span></p>
+          <p className="mt-1 text-xs text-gray-600">Tell it to them in person. It is shown only now and is not stored anywhere readable. They must choose their own password when they sign in.</p>
+          <button onClick={() => setIssued(null)} className="mt-2 text-xs font-medium text-kenya-green hover:underline">Hide</button>
+        </div>
+      )}
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
             <tr>
@@ -206,6 +223,7 @@ function MembersTab({ coop, onChange }) {
               <th className="px-4 py-2">National ID</th>
               <th className="px-4 py-2">Gender</th>
               <th className="px-4 py-2">Share Capital</th>
+              <th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody>
@@ -215,10 +233,11 @@ function MembersTab({ coop, onChange }) {
                 <td className="px-4 py-2">{m.nationalId}</td>
                 <td className="px-4 py-2">{m.gender}</td>
                 <td className="px-4 py-2">KES {Number(m.shareCapital).toLocaleString()}</td>
+                <td className="px-4 py-2 text-right"><button onClick={() => resetPassword(m)} className="whitespace-nowrap text-xs font-medium text-kenya-green hover:underline">Reset password</button></td>
               </tr>
             ))}
             {(coop.members || []).length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">No members yet.</td></tr>
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">No members yet.</td></tr>
             )}
           </tbody>
         </table>

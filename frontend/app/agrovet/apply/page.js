@@ -116,7 +116,7 @@ export default function AgrovetApplyPage() {
             required: false,
             placeholder: "Till, paybill, or phone for reimbursement — can be added later",
           })}
-          {field("Password", "password", { type: "password", placeholder: "At least 8 characters" })}
+          {field("Password", "password", { type: "password", placeholder: "10+ characters, letters and numbers" })}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 

@@ -15,6 +15,8 @@ export default function ProtectedRoute({ children }) {
     if (!loading && !user) router.replace(sessionLoginPath());
     // An account on a temporary/published password can only change it.
     else if (!loading && user?.mustChangePassword && pathname !== "/account/password") router.replace("/account/password");
+    // Roles that must use two-step sign-in set it up before anything else.
+    else if (!loading && user?.mfaSetupRequired && !["/account/security", "/account/password"].includes(pathname)) router.replace("/account/security");
   }, [user, loading, router, pathname]);
 
   if (loading || !user) {

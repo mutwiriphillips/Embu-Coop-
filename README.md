@@ -10,7 +10,7 @@ Section (see `/docs`), then generalized to a national, multi-county platform.
 
 ## Stack
 
-- **Frontend:** React.js + Next.js (App Router), Tailwind CSS (official Kenyan colour palette)
+- **Frontend:** React 19 + Next.js 15 (App Router), Tailwind CSS (official Kenyan colour palette)
 - **Backend:** Node.js + Express, RESTful JSON API
 - **Database:** PostgreSQL via Prisma ORM
 - **Auth:** JWT-based auth with Role-Based Access Control (RBAC), county-scoped
@@ -491,3 +491,11 @@ agreement with the State Department for Co-operatives.
 
 ## Backups
 National Admin can download a full backup from the Dashboard ("Database backup"); `npm run backup` / `npm run restore` do the same from a computer, and `.github/workflows/nightly-backup.yml` keeps a nightly encrypted copy. See "Backups and recovery" in RENDER_DEPLOYMENT.md.
+
+## Security
+Read [`SECURITY_ASSESSMENT.md`](./SECURITY_ASSESSMENT.md) first. Summary of what the code enforces:
+- Passwords: 10+ characters with letters and numbers; the published `Pilot2026!` forces a change at first sign-in (staff, farmer, agrovet); changing or resetting a password ends older sessions.
+- Two-step sign-in (authenticator app) is required for National Admin and Director; recovery codes; admin reset; `npm run reset:mfa -- <email>` as break-glass.
+- Farmers and agrovets: self-service *Change password*; staff issue one-time temporary passwords. No self-service "forgot password" (needs an SMS/email provider).
+- Deploys no longer pass `--accept-data-loss`; see `RENDER_DEPLOYMENT.md` to move to reviewed migrations.
+- Moving to the county domain: follow [`DOMAIN_SMOKE_CHECKLIST.md`](./DOMAIN_SMOKE_CHECKLIST.md).

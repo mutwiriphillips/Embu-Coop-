@@ -29,7 +29,7 @@ export function MemberAuthProvider({ children }) {
       window.localStorage.setItem("embu_member_token", data.token);
       window.localStorage.setItem("embu_member_profile", JSON.stringify(data.member));
       setMember(data.member);
-      router.push("/member/dashboard");
+      router.push(data.member?.account?.mustChangePassword ? "/member/password" : "/member/dashboard");
     },
     [router]
   );
@@ -45,6 +45,13 @@ export function MemberAuthProvider({ children }) {
     [router]
   );
 
+  // After a password change the server sends a fresh token and profile.
+  const updateSession = useCallback((token, profile) => {
+    window.localStorage.setItem("embu_member_token", token);
+    window.localStorage.setItem("embu_member_profile", JSON.stringify(profile));
+    setMember(profile);
+  }, []);
+
   const logout = useCallback(() => {
     window.localStorage.removeItem("embu_member_token");
     window.localStorage.removeItem("embu_member_profile");
@@ -53,7 +60,7 @@ export function MemberAuthProvider({ children }) {
   }, [router]);
 
   return (
-    <MemberAuthContext.Provider value={{ member, loading, login, register, logout }}>
+    <MemberAuthContext.Provider value={{ member, loading, login, register, logout, updateSession }}>
       {children}
     </MemberAuthContext.Provider>
   );
