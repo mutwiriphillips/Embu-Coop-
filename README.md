@@ -112,7 +112,7 @@ npm install
 npm run dev                # http://localhost:3000
 ```
 
-All pilot accounts share the password `Pilot2026!` (a published test password: the first sign-in forces a change; keep this repository private):
+All pilot accounts share the password `Pilot2026!` (a published test password, used as-is during the pilot; keep this repository private; the forced change is switched on at full launch, see Security):
 - **National Admin:** admin@cooperatives.go.ke
 - **County Director (Embu):** director@embu.go.ke
 - **Sub-County Officer (Embu):** subcounty@embu.go.ke
@@ -475,6 +475,16 @@ could be planned for and reported on anywhere; documents never stored a file.
 Tested with 84 end-to-end HTTP checks plus the previous 52-check suite as a
 regression (all passing), and schema-validated with Prisma's own validator.
 
+## Staff Directory, Status & Transfer Merit (Module 11)
+
+A register of ministry/county staff, **separate from login accounts** (no accounts or reporting lines are created by it).
+
+- **Profile** (P/No, job group, age, duty station, phone, email, year employed, qualifications) with a **Current status** panel below it: *Active at the office*, *Fieldwork* or *On leave*, with an optional end date (it shows as "at office" again once the date passes) and a history.
+- **Transfers** go up one level at a time: sub-county office -> county office -> Ministry. Sub-county -> county is decided by the county Director (or National Admin, never the proposer); county -> Ministry by the National Admin only. A rejection needs a reason; one open proposal per person.
+- **Merit score (0-100):** years of service 30 (1.5 per year, capped at 20 years) + qualifications 25 + job group 25 + appraisal 20 (entered by the proposer). Ranking tab lists staff by merit per route. The formula lives in `backend/src/utils/transferMerit.js`.
+- **Visibility:** National Admin all; Director their county; Sub-County Officer their sub-county. `Remarks` (e.g. disability notes) is shown only to Director and National Admin. Staff details are personal data under the Data Protection Act 2019.
+- **Loading the roster:** Staff Directory -> **Load staff roster** (Director/National Admin). Non-destructive: creates missing people, fills blanks only, never touches status or transfers. The sheet's password column is deliberately NOT imported.
+
 ## Open Items From Scope (to confirm with County before Phase 2)
 
 See `docs/Embu_Coop_Engineering_Scope.pdf`, Section 6 — sub-county/ward list,
@@ -493,9 +503,14 @@ agreement with the State Department for Co-operatives.
 National Admin can download a full backup from the Dashboard ("Database backup"); `npm run backup` / `npm run restore` do the same from a computer, and `.github/workflows/nightly-backup.yml` keeps a nightly encrypted copy. See "Backups and recovery" in RENDER_DEPLOYMENT.md.
 
 ## Security
-Read [`SECURITY_ASSESSMENT.md`](./SECURITY_ASSESSMENT.md) first. Summary of what the code enforces:
-- Passwords: 10+ characters with letters and numbers; the published `Pilot2026!` forces a change at first sign-in (staff, farmer, agrovet); changing or resetting a password ends older sessions.
-- Two-step sign-in (authenticator app) is required for National Admin and Director; recovery codes; admin reset; `npm run reset:mfa -- <email>` as break-glass.
-- Farmers and agrovets: self-service *Change password*; staff issue one-time temporary passwords. No self-service "forgot password" (needs an SMS/email provider).
-- Deploys no longer pass `--accept-data-loss`; see `RENDER_DEPLOYMENT.md` to move to reviewed migrations.
-- Moving to the county domain: follow [`DOMAIN_SMOKE_CHECKLIST.md`](./DOMAIN_SMOKE_CHECKLIST.md).
+Read [`SECURITY_ASSESSMENT.md`](./SECURITY_ASSESSMENT.md) first.
+
+**Pilot mode (current):** `SECURITY_HARDENING="false"`. The published pilot password (`Pilot2026!`) keeps working for every account, nothing forces a password change, and two-step sign-in is not required. Everything below is built, tested and switched off, ready for full launch.
+
+**Full launch:** set `SECURITY_HARDENING="true"` on the backend service (Render → Environment) and redeploy. That switches on together:
+- the forced change of the published password at first sign-in (staff, farmers, agrovets) and strict password rules (10+ characters, letters and numbers, no common or published passwords);
+- two-step sign-in (authenticator app) for National Admin and Director, with recovery codes, admin reset and `npm run reset:mfa -- <email>` as break-glass.
+
+Always on, in both modes: self-service *Change password* (farmers, agrovets, staff), staff-issued one-time temporary passwords, sign-in rate limits, security headers, session revocation on password change, open sign-up off, no `--accept-data-loss` on deploys. There is no self-service "forgot password" yet (needs an SMS/email provider).
+
+Moving to the county domain: follow [`DOMAIN_SMOKE_CHECKLIST.md`](./DOMAIN_SMOKE_CHECKLIST.md).

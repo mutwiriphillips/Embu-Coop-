@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/leave", label: "Leave", roles: STAFF_ONLY },
   { href: "/disbursements", label: "Farmer Disbursements", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
   { href: "/agrovets", label: "Agrovet Shops", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
+  { href: "/staff-directory", label: "Staff Directory", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
   { href: "/staff", label: "Staff & Access", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
 ];
 
@@ -46,7 +47,7 @@ export default function Sidebar() {
               key={l.href}
               href={l.href}
               className={`block rounded-md px-3 py-2 text-sm ${
-                pathname?.startsWith(l.href)
+                (pathname === l.href || pathname?.startsWith(l.href + "/"))
                   ? "bg-kenya-green/10 font-semibold text-kenya-green"
                   : "text-gray-600 hover:bg-gray-100"
               }`}

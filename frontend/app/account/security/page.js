@@ -16,7 +16,7 @@ export default function SecurityPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState({ password: "", code: "", action: "" });
-  const required = Boolean(user?.mfaSetupRequired) || ["NATIONAL_ADMIN", "DIRECTOR"].includes(user?.role);
+  const required = Boolean(user?.mfaRequired);
 
   async function start() {
     setError(""); setBusy(true);

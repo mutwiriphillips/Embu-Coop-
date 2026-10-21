@@ -15,7 +15,7 @@ Fill in your real URLs once, here, then use them for every step:
 - Backend URL: `_______________________________`
 - Frontend URL: `_______________________________`
 
-All seeded accounts share the password `Pilot2026!` unless noted. **Every first sign-in with it now forces a password change** (you land on Change password); choose a new one, then continue. Passwords need 10+ characters with letters and numbers. **National Admin and Director are then sent to *Security* to set up two-step sign-in** (authenticator app; save the recovery codes) before anything else works.
+All seeded accounts share the password `Pilot2026!` unless noted. **During the pilot (`SECURITY_HARDENING=false`) the pilot password works as is: no forced change, no two-step set-up.** At full launch (`SECURITY_HARDENING=true`) every first sign-in with it forces a password change, and National Admin and Director must also set up two-step sign-in (see the *Full-launch security* checks in `DOMAIN_SMOKE_CHECKLIST.md`).
 
 ---
 
@@ -131,7 +131,7 @@ As Director or National Admin:
 
 ## Phase 8 — Farmer / Member Portal (10 minutes)
 
-- [ ] `/member/login` with National ID `PILOT-0001` and password `Pilot2026!` is sent to **Change password**; the published password is refused as the new one; after choosing your own, the dashboard opens
+- [ ] `/member/login` with National ID `PILOT-0001` and password `Pilot2026!` opens the dashboard directly (pilot mode); *Change password* in the header still works
 - [ ] Staff: *Cooperative → Members → Reset password* shows a one-time temporary password; the farmer's old password stops working; the temporary one forces a change
 - [ ] Overview tab shows non-zero totals matching what Phase 3 recorded
 - [ ] Cooperative's credit band from Phase 4 is visible here too
@@ -146,7 +146,7 @@ As Director or National Admin:
       all 47 counties, and shows a visible error with a Retry button (not a
       blank list) if the backend is unreachable
 - [ ] `/agrovet/login` with National ID `AGRO-0001` and password `Pilot2026!`
-      is sent to Change password first; after that it shows **Runyenjes Agrovet Supplies (Pilot)** as **Approved**
+      opens the dashboard and shows **Runyenjes Agrovet Supplies (Pilot)** as **Approved**
 - [ ] My Catalog lists the 6 seeded products
 - [ ] Record Collection: look up `PILOT-0001`, select the "Embu County Input
       Subsidy (Pilot)" credit (KES 10,000 remaining), add 2 × DAP (KES 5,000),
@@ -263,3 +263,10 @@ Note the date and who ran it — this is worth keeping as a record, since
 the Governor's office, not an assumption.
 
 **Last run:** `_______________` **By:** `_______________` **Result:** ☐ Clean ☐ Issues found (listed above)
+
+## Staff Directory
+- [ ] Director sees "Staff Directory" in the sidebar; field officers do not.
+- [ ] "Load staff roster" loads 25 people; pressing it again adds none.
+- [ ] Open a profile; set Fieldwork / On leave with an end date; the badge and list tiles update.
+- [ ] Propose a sub-county -> county transfer; Director approves under Transfers; duty station changes.
+- [ ] Remarks is visible to Director/National Admin only.

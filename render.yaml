@@ -38,6 +38,11 @@ services:
         value: production
       - key: FRONTEND_ORIGIN
         value: https://embu-coop-frontend.onrender.com
+      # Pilot: "false" keeps the published pilot passwords working. Set "true"
+      # at full launch (forced password change, two-step sign-in for admins,
+      # strict password rules). See SECURITY_ASSESSMENT.md.
+      - key: SECURITY_HARDENING
+        value: "false"
       # Open self-signup lets anyone on the internet create a county account.
       # Keep "false". (Turn on only briefly for a supervised test.)
       - key: ALLOW_OPEN_SIGNUP

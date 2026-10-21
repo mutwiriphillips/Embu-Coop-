@@ -27,6 +27,10 @@ function temporaryPassword() {
 
 /** A login with the published test password forces a change before anything else works. */
 async function flagDefaultPassword(model, account, password) {
+  if (!forceDefaultChange() && isKnownDefault(password) && account.mustChangePassword) {
+    await prisma[model].update({ where: { id: account.id }, data: { mustChangePassword: false } });
+    account.mustChangePassword = false;
+  }
   if (forceDefaultChange() && isKnownDefault(password) && !account.mustChangePassword) {
     await prisma[model].update({ where: { id: account.id }, data: { mustChangePassword: true } });
     account.mustChangePassword = true;

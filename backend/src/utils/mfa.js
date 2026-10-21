@@ -119,7 +119,7 @@ const groupSecret = (s) => s.match(/.{1,4}/g).join(" ");
 
 /** Roles that must use two-step sign-in (MFA_REQUIRED_ROLES, default National Admin + Director). */
 function requiredRoles() {
-  if (process.env.MFA_ENFORCEMENT === "false") return [];
+  if (!require("./passwordPolicy").mfaEnforced()) return [];
   return (process.env.MFA_REQUIRED_ROLES || "NATIONAL_ADMIN,DIRECTOR").split(",").map((r) => r.trim()).filter(Boolean);
 }
 const mfaSetupRequired = (user) => Boolean(user) && !user.mfaEnabled && user.role !== "COOPERATIVE_MANAGER" && requiredRoles().includes(user.role);

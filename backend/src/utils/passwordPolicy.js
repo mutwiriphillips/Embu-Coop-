@@ -8,9 +8,27 @@ const COMMON = ["password", "password1", "password123", "12345678", "123456789",
 
 const isKnownDefault = (password) => KNOWN_DEFAULTS.includes(String(password || "").toLowerCase());
 
+/**
+ * One master switch for the hardening that is held back during the pilot:
+ * SECURITY_HARDENING=true turns on (a) the forced change of the published test
+ * password, (b) two-step sign-in for National Admin and Director, and (c) the
+ * strict password rules. Left unset or false, the pilot password keeps working.
+ * FORCE_DEFAULT_PASSWORD_CHANGE and MFA_ENFORCEMENT, when set to "true" or
+ * "false", override the master switch for their own feature.
+ */
+const hardening = () => process.env.SECURITY_HARDENING === "true";
+const flag = (name) => (process.env[name] === "true" ? true : process.env[name] === "false" ? false : hardening());
+
 /** Returns a message describing the first problem, or null if acceptable. */
 function checkNewPassword(password, { email, current } = {}) {
   const p = String(password || "");
+  if (!hardening()) {
+    // Pilot rules: just a sensible minimum. The published test password is allowed.
+    if (p.length < 8) return "Use at least 8 characters.";
+    if (p.length > 128) return "Use at most 128 characters.";
+    if (current && p === current) return "Choose a password different from the current one.";
+    return null;
+  }
   if (p.length < 10) return "Use at least 10 characters.";
   if (p.length > 128) return "Use at most 128 characters.";
   if (!/[A-Za-z]/.test(p) || !/[0-9]/.test(p)) return "Include both letters and numbers.";
@@ -27,7 +45,9 @@ function checkNewPassword(password, { email, current } = {}) {
 /** Whether tokens issued at `iatSeconds` pre-date the last password change. */
 const issuedBeforeChange = (iatSeconds, changedAt) => Boolean(changedAt) && Number(iatSeconds) < Math.floor(new Date(changedAt).getTime() / 1000);
 
-/** FORCE_DEFAULT_PASSWORD_CHANGE=false switches the forced change off. */
-const forceDefaultChange = () => process.env.FORCE_DEFAULT_PASSWORD_CHANGE !== "false";
+/** Whether signing in with the published test password forces a change (off during the pilot). */
+const forceDefaultChange = () => flag("FORCE_DEFAULT_PASSWORD_CHANGE");
+/** Whether the MFA requirement for National Admin / Director is on (off during the pilot). */
+const mfaEnforced = () => flag("MFA_ENFORCEMENT");
 
-module.exports = { isKnownDefault, checkNewPassword, issuedBeforeChange, forceDefaultChange };
+module.exports = { isKnownDefault, checkNewPassword, issuedBeforeChange, forceDefaultChange, mfaEnforced, hardening };

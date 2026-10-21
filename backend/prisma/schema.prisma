@@ -25,6 +25,7 @@ model County {
   cooperatives Cooperative[]
   agrovetShops AgrovetShop[]
   subCounties  SubCounty[]
+  staffMembers StaffMember[]
 }
 
 // ---------------------------------------------------------------------------
@@ -1009,4 +1010,110 @@ model AuditLog {
   entityId   String?
   metadata   Json?
   createdAt  DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// STAFF DIRECTORY: the cooperative section's own staff roster (designation,
+// job group, duty station, ...), separate from login accounts. A person here
+// does not need an account; `userId` links one later. Reporting lines are not
+// stored here.
+// ---------------------------------------------------------------------------
+
+enum DutyLevel {
+  SUB_COUNTY_OFFICE
+  COUNTY_OFFICE
+  MINISTRY
+}
+
+enum WorkStatus {
+  ACTIVE_OFFICE // at the office
+  FIELDWORK
+  ON_LEAVE
+}
+
+enum TransferStatus {
+  PROPOSED
+  APPROVED // applied: the staff member's duty station was changed
+  REJECTED
+  CANCELLED
+}
+
+model StaffMember {
+  id             String     @id @default(uuid())
+  serialNo       Int?
+  pNo            String     @unique // personnel number, kept as text
+  fullName       String
+  designation    String
+  jobGroup       String?
+  age            Int?
+  // null once posted to the Ministry (no longer a county's staff)
+  countyId       String?
+  county         County?    @relation(fields: [countyId], references: [id])
+  dutyStation    String
+  dutyLevel      DutyLevel
+  subCountyId    String?
+  phoneNumber    String?
+  email          String?
+  // Sensitive (may hold disability or similar notes): Director / National Admin only.
+  remarks        String?
+  yearEmployed   Int?
+  qualifications String?
+
+  // Current status, shown under the profile.
+  status          WorkStatus @default(ACTIVE_OFFICE)
+  statusNote      String?
+  statusSince     DateTime   @default(now())
+  statusUntil     DateTime? // expected return / end date; after it the person shows as at the office
+  statusUpdatedBy String?
+
+  userId         String?    @unique // login account, linked later
+  active         Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  statusHistory  StaffStatusChange[]
+  transfers      StaffTransfer[]
+
+  @@index([countyId])
+  @@index([subCountyId])
+}
+
+model StaffStatusChange {
+  id         String      @id @default(uuid())
+  staffId    String
+  staff      StaffMember @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  status     WorkStatus
+  note       String?
+  since      DateTime
+  until      DateTime?
+  changedBy  String?
+  createdAt  DateTime    @default(now())
+
+  @@index([staffId])
+}
+
+model StaffTransfer {
+  id             String         @id @default(uuid())
+  staffId        String
+  staff          StaffMember    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  fromLevel      DutyLevel
+  toLevel        DutyLevel // sub-county -> county, or county -> Ministry
+  fromStation    String
+  toStation      String
+  // Merit at the time of the proposal (see utils/transferMerit.js)
+  meritScore     Int
+  meritBreakdown Json
+  appraisalScore Int? // 0-20, entered by the proposer from the appraisal
+  justification  String
+  effectiveDate  DateTime?
+  status         TransferStatus @default(PROPOSED)
+  requestedBy    String
+  decidedBy      String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([staffId])
+  @@index([status])
 }

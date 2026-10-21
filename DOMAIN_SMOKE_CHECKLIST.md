@@ -8,9 +8,8 @@ Write down: Backend URL `__________` Frontend URL `https://embu-cooperatives.go.
 - [ ] **YOU** Confirm who administers `.go.ke` names for the county (the Kenya ICT Authority / government registrar process) and that `embu-cooperatives.go.ke` is registered to the county, with at least two named contacts.
 - [ ] Take a backup: National Admin Dashboard → *Download backup*. Store it encrypted, off Render. Check the file is more than a few KB.
 - [ ] Render database is on a **paid plan** with backups, and its access list is restricted.
-- [ ] Backend env on Render: `ALLOW_OPEN_SIGNUP=false`, `NODE_ENV=production`, `JWT_SECRET` 32+ characters, `TRUST_PROXY_HOPS=1`, `MFA_ENFORCEMENT` not set to `false`.
-- [ ] Every National Admin and Director has enrolled two-step sign-in and holds their recovery codes. Another National Admin can reset them.
-- [ ] No account still uses `Pilot2026!`; `PILOT-0001` and `AGRO-0001` are deactivated.
+- [ ] Backend env on Render: `ALLOW_OPEN_SIGNUP=false`, `NODE_ENV=production`, `JWT_SECRET` 32+ characters, `TRUST_PROXY_HOPS=1`, `SECURITY_HARDENING` = `true` **at full launch** (`false` while the pilot passwords are still in use).
+- [ ] **Full launch only** (after `SECURITY_HARDENING=true`): every National Admin and Director has enrolled two-step sign-in and holds their recovery codes; another National Admin can reset them. Every account has replaced `Pilot2026!` (sign-in forces it); `PILOT-0001` and `AGRO-0001` are deactivated.
 - [ ] The build command no longer contains `--accept-data-loss` (and, if you did the baseline, uses `prisma migrate deploy`).
 - [ ] `coat-of-arms.svg` and `county-map.svg` are in `frontend/public/images/`, and you have the right to use all five photographs.
 
@@ -59,3 +58,10 @@ Write down: Backend URL `__________` Frontend URL `https://embu-cooperatives.go.
 1. Backend `FRONTEND_ORIGIN` back to the old Render frontend URL; redeploy.
 2. Frontend `NEXT_PUBLIC_API_BASE_URL` back to the old backend URL; rebuild.
 3. Keep the custom domains attached but unused until fixed. No data changes are involved, so nothing needs restoring.
+
+## I. Full-launch security switch (when pilot passwords are retired)
+- [ ] Backend → Environment: `SECURITY_HARDENING` = `true`; redeploy.
+- [ ] Sign in with `Pilot2026!` as a staff account: you are sent to *Change password* and the published password is refused as the new one.
+- [ ] National Admin and Director are then sent to *Security*: scan the QR, enter the code, save the 8 recovery codes. A later sign-in asks for a code.
+- [ ] Farmer (`PILOT-0001`) and agrovet (`AGRO-0001`) logins are forced to change too; then deactivate both test accounts.
+- [ ] Rollback if someone is locked out: set `SECURITY_HARDENING=false`, or run `npm run reset:mfa -- <email>` for one person.

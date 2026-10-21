@@ -45,7 +45,7 @@ function signToken(user) {
 function toPublicUser(user) {
   // Never send credential material to the browser.
   const { passwordHash, mfaSecret, mfaRecoveryHashes, mfaLastStep, ...safe } = user;
-  return { ...safe, mfaEnabled: Boolean(user.mfaEnabled), mfaSetupRequired: mfaSetupRequired(user) };
+  return { ...safe, mfaEnabled: Boolean(user.mfaEnabled), mfaSetupRequired: mfaSetupRequired(user), mfaRequired: user.role !== "COOPERATIVE_MANAGER" && require("../utils/mfa").requiredRoles().includes(user.role) };
 }
 
 async function login(req, res) {
@@ -94,6 +94,12 @@ async function login(req, res) {
  * no re-seeding; the plaintext is only ever in hand at login.)
  */
 async function flagDefaultPassword(user, password) {
+  // Pilot mode: someone using the published password on purpose must not stay
+  // locked behind a flag set while enforcement was on.
+  if (!forceDefaultChange() && isKnownDefault(password) && user.mustChangePassword) {
+    await prisma.user.update({ where: { id: user.id }, data: { mustChangePassword: false } });
+    user.mustChangePassword = false;
+  }
   if (forceDefaultChange() && isKnownDefault(password) && !user.mustChangePassword) {
     await prisma.user.update({ where: { id: user.id }, data: { mustChangePassword: true } });
     user.mustChangePassword = true;

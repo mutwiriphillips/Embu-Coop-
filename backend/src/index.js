@@ -28,6 +28,7 @@ const cooperativeAuthRoutes = require("./routes/cooperativeAuth");
 const fileRoutes = require("./routes/files");
 const agrovetSelfRoutes = require("./routes/agrovetSelf");
 const agrovetRoutes = require("./routes/agrovets");
+const staffDirectoryRoutes = require("./routes/staffDirectory");
 const adminRoutes = require("./routes/admin");
 const errorHandler = require("./middleware/errorHandler");
 
@@ -103,6 +104,7 @@ app.use("/api/files", fileRoutes);
 app.use("/api/agrovet", agrovetSelfRoutes);
 app.use("/api/agrovets", agrovetRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/staff-directory", staffDirectoryRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 app.use(errorHandler);

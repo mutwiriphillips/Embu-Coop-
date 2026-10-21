@@ -1,5 +1,8 @@
 # Security Assessment: National Cooperative Management & Governance System
 
+> **Status (decision of 21 Oct 2026): hardening on hold for the pilot.** `SECURITY_HARDENING=false`: the published pilot password keeps working for all accounts; the forced password change (findings 1 and 16), two-step sign-in (15) and strict password rules are built and tested but **switched off**. Findings 1, 15 and 16 therefore remain **open in practice** until `SECURITY_HARDENING=true` is set at full launch. Risk while on hold: anyone who has read the repository or docs can sign in to the seeded accounts, including National Admin (who can download a full backup). Mitigations that stay on: keep the repository private, keep the site URL unpublished, and do not load real farmer data until the switch is on. Everything else in this document (headers, rate limits, session handling, open sign-up off, Next 15, no data-loss deploys) is unaffected.
+
+
 Assessed 14 October 2026 · Pilot: `embu-coop-frontend-bs4b.onrender.com` · Target: `embu-cooperatives.go.ke`
 
 ## 1. Scope, method and limits (read first)
@@ -87,3 +90,6 @@ These are for you and counsel to verify; I am not giving legal advice.
 - A real browser run: sign in with the published password → forced to the change page → weak and published passwords refused → new password accepted → app usable, no CSP violations.
 - Real browser runs on Next 15 / React 19: forced password change (staff, farmer, agrovet), two-step set-up, code login, recovery-code login, staff issuing temporary passwords, and layout at phone and laptop widths, with no CSP violations or page errors.
 - **Not verified here:** anything on your live Render service, the live database, GitHub settings, DNS/TLS for the new domain, and a real authenticator app scanning the QR code (the code generator was checked against the RFC test vectors instead).
+
+## Addendum: Staff Directory
+New personal data (names, phones, emails, P/No, and a restricted Remarks field that may hold disability information). Access is role/area scoped, Remarks is limited to Director and National Admin, audit logs never store phone/ID/remarks values. The source spreadsheet contains plaintext system passwords for some staff: these were not imported; remove or rotate them and do not circulate the file.
