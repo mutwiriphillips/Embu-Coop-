@@ -1066,6 +1066,10 @@ model StaffMember {
   statusUntil     DateTime? // expected return / end date; after it the person shows as at the office
   statusUpdatedBy String?
 
+  // Who this person reports to (another StaffMember id). null = reports to the Director.
+  // Only the Director sets this (the National Admin can override).
+  reportsToId    String?
+
   userId         String?    @unique // login account, linked later
   active         Boolean    @default(true)
   createdAt      DateTime   @default(now())
@@ -1103,7 +1107,7 @@ model StaffTransfer {
   // Merit at the time of the proposal (see utils/transferMerit.js)
   meritScore     Int
   meritBreakdown Json
-  appraisalScore Int? // 0-20, entered by the proposer from the appraisal
+  appraisalScore Float? // 0-20, entered by the proposer from the appraisal
   justification  String
   effectiveDate  DateTime?
   status         TransferStatus @default(PROPOSED)
@@ -1111,6 +1115,12 @@ model StaffTransfer {
   decidedBy      String?
   decidedAt      DateTime?
   decisionNote   String?
+  // Where the person was before the move, so a National Admin override can put them back.
+  fromCountyId    String?
+  fromSubCountyId String?
+  // Set when the National Admin overrides the Director's decision.
+  overriddenBy   String?
+  overriddenAt   DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 

@@ -13,7 +13,7 @@ const LINKS = [
   { href: "/leave", label: "Leave", roles: STAFF_ONLY },
   { href: "/disbursements", label: "Farmer Disbursements", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
   { href: "/agrovets", label: "Agrovet Shops", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
-  { href: "/staff-directory", label: "Staff Directory", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
+  { href: "/staff-directory", label: "Staff Directory", roles: ["NATIONAL_ADMIN", "DIRECTOR"] },
   { href: "/staff", label: "Staff & Access", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
 ];
 

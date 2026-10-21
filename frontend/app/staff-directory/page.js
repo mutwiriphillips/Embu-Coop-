@@ -19,7 +19,7 @@ export default function StaffDirectoryPage() {
   return (
     <ProtectedRoute>
       <h1 className="text-2xl font-bold">Staff Directory</h1>
-      <p className="mb-4 text-sm text-gray-500">Cooperative section staff: designation, duty station, current status and transfers. This is the staff roster, separate from sign-in accounts.</p>
+      <p className="mb-4 text-sm text-gray-500">Confidential: visible to the Director and National Admin only. Everyone reports to the Director unless the Director sets otherwise; the Director's decisions on staff are final, and the National Admin can override.</p>
       <div className="mb-5 flex gap-2 overflow-x-auto border-b border-gray-200">
         {TABS.map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${tab === t ? "border-kenya-green text-kenya-green" : "border-transparent text-gray-500 hover:text-gray-800"}`}>{t}</button>
@@ -40,6 +40,7 @@ function StaffTab({ canImport }) {
   const [status, setStatus] = useState("");
   const [station, setStation] = useState("");
   const [busy, setBusy] = useState(false);
+  const [problems, setProblems] = useState([]);
 
   const load = () => api.get("/staff-directory").then((r) => setData(r.data)).catch((e) => setError(e?.response?.data?.error || "Could not load the staff directory."));
   useEffect(() => { load(); }, []);
@@ -51,6 +52,31 @@ function StaffTab({ canImport }) {
       setNotice(`Roster loaded: ${r.created} added, ${r.filled} filled in, ${r.unchanged} already up to date. Nothing existing was overwritten.`);
       load();
     } catch (e) { setError(e?.response?.data?.error || "Could not load the roster."); } finally { setBusy(false); }
+  }
+
+  async function downloadSheet() {
+    setError(""); setNotice("");
+    try {
+      const res = await api.get("/staff-directory/sheet", { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a"); a.href = url; a.download = "staff-sheet.xlsx"; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (e) { setError("Could not download the sheet."); }
+  }
+  async function uploadSheet(ev) {
+    const file = ev.target.files?.[0]; ev.target.value = "";
+    if (!file) return;
+    setBusy(true); setError(""); setNotice(""); setProblems([]);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const { data: r } = await api.post("/staff-directory/sheet", fd);
+      setNotice(`Sheet loaded: ${r.created} added, ${r.updated} updated, ${r.unchanged} unchanged.`);
+      load();
+    } catch (e) {
+      const d = e?.response?.data;
+      setError(d?.error || "Could not load the sheet.");
+      setProblems(d?.errors || []);
+    } finally { setBusy(false); }
   }
 
   const stations = useMemo(() => [...new Set((data?.staff || []).map((s) => s.dutyStation))].sort(), [data]);
@@ -72,6 +98,21 @@ function StaffTab({ canImport }) {
       </div>
       {notice && <p className="mb-3 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">{notice}</p>}
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {problems.length > 0 && (
+        <ul className="mb-3 max-h-48 list-disc space-y-0.5 overflow-auto rounded-md bg-red-50 py-2 pl-7 pr-3 text-xs text-red-800">
+          {problems.map((p, i) => <li key={i}>Row {p.row}{p.pNo ? ` (P/No ${p.pNo})` : ""}: {p.error}</li>)}
+        </ul>
+      )}
+      {canImport && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-white p-3 text-sm">
+          <span className="text-gray-600">Edit everyone in Excel:</span>
+          <button onClick={downloadSheet} className="rounded-md border border-kenya-green px-3 py-1.5 text-xs font-semibold text-kenya-green">Download staff sheet</button>
+          <label className={`cursor-pointer rounded-md bg-kenya-green px-3 py-1.5 text-xs font-semibold text-white ${busy ? "opacity-50" : ""}`}>{busy ? "Loading…" : "Upload staff sheet"}
+            <input type="file" accept=".xlsx" className="hidden" disabled={busy} onChange={uploadSheet} />
+          </label>
+          <span className="text-xs text-gray-500">Keep the file private. Blank cells change nothing; nobody is deleted (set Active to No).</span>
+        </div>
+      )}
       {canImport && (
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md border border-dashed border-gray-300 bg-white p-3 text-sm">
           <span className="text-gray-600">{data.total === 0 ? "The directory is empty." : "Reload the bundled Embu roster:"} It adds missing people and fills blanks only; it never overwrites.</span>
@@ -127,6 +168,11 @@ function TransfersTab() {
     try { await api.post(`/staff-directory/transfers/${id}/decision`, { decision, note: notes[id] || "" }); load(); }
     catch (e) { setError(e?.response?.data?.error || "Could not record the decision."); }
   }
+  async function override(id, decision) {
+    setError("");
+    try { await api.post(`/staff-directory/transfers/${id}/override`, { decision, note: notes[id] || "" }); load(); }
+    catch (e) { setError(e?.response?.data?.error || "Could not override."); }
+  }
   return (
     <div>
       <div className="mb-3 flex gap-2 text-xs">
@@ -151,7 +197,14 @@ function TransfersTab() {
                   <button onClick={() => decide(t.id, "REJECT")} className="rounded-md border border-kenya-red px-3 py-1.5 text-xs font-semibold text-kenya-red">Reject</button>
                 </div>
               )}
-              {t.status === "PROPOSED" && !t.canDecide && <p className="mt-2 text-xs text-gray-500">{t.toLevel === "MINISTRY" ? "Waiting for the National Admin." : "Waiting for the county Director or the National Admin."}</p>}
+              {t.status === "PROPOSED" && !t.canDecide && <p className="mt-2 text-xs text-gray-500">Waiting for the Director's decision.</p>}
+              {t.overriddenAt && <p className="mt-1 text-xs font-medium text-amber-700">Overridden by the National Admin.</p>}
+              {t.canOverride && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+                  <input value={notes[t.id] || ""} onChange={(e) => setNotes({ ...notes, [t.id]: e.target.value })} placeholder="Reason for the override (required)" className="w-64 rounded-md border border-gray-300 px-2 py-1.5 text-xs" />
+                  <button onClick={() => override(t.id, t.status === "APPROVED" ? "REJECT" : "APPROVE")} className="rounded-md border border-amber-600 px-3 py-1.5 text-xs font-semibold text-amber-700">{t.status === "APPROVED" ? "Override: undo this move" : "Override: approve and move"}</button>
+                </div>
+              )}
             </li>
           ))}
         </ul>

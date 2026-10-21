@@ -26,6 +26,7 @@ export default function StaffProfilePage() {
         <div className="mt-2 max-w-3xl space-y-6">
           <ProfileCard p={p} onSaved={load} />
           <StatusPanel p={p} onSaved={load} />
+          <ReportingPanel p={p} onSaved={load} />
           <TransferPanel p={p} onSaved={load} />
         </div>
       )}
@@ -130,12 +131,44 @@ function StatusPanel({ p, onSaved }) {
           {error && <p className="text-sm text-red-600 sm:col-span-3">{error}</p>}
           <div className="sm:col-span-3"><button disabled={busy} className="rounded-md bg-kenya-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : "Update status"}</button></div>
         </form>
-      ) : <p className="mt-3 text-xs text-gray-500">Only the Director, the National Admin, or the Sub-County Officer for this person's sub-county can change this.</p>}
+      ) : <p className="mt-3 text-xs text-gray-500">Only the Director or the National Admin can change this.</p>}
       {p.history.length > 0 && (
         <details className="mt-4 text-xs text-gray-600">
           <summary className="cursor-pointer font-medium">Status history ({p.history.length})</summary>
           <ul className="mt-2 space-y-1">{p.history.map((h) => <li key={h.id}>{fmtDate(h.since)}: <strong>{STATUS_OPTIONS.find((o) => o.value === h.status)?.label}</strong>{h.until ? ` until ${fmtDate(h.until)}` : ""}{h.note ? ` · ${h.note}` : ""}</li>)}</ul>
         </details>
+      )}
+    </section>
+  );
+}
+
+function ReportingPanel({ p, onSaved }) {
+  const [to, setTo] = useState(p.reportsTo?.id || "");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function save(e) {
+    e.preventDefault(); setError(""); setBusy(true);
+    try { await api.put(`/staff-directory/${p.id}/reports-to`, { reportsToId: to || null }); onSaved(); }
+    catch (err) { setError(err?.response?.data?.error || "Could not save."); } finally { setBusy(false); }
+  }
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-5">
+      <h2 className="text-sm font-semibold">Reporting line</h2>
+      <p className="mt-1 text-sm text-gray-700">Reports to: <strong>{p.reportsTo ? `${p.reportsTo.fullName} (${p.reportsTo.designation})` : "the Director (default)"}</strong></p>
+      {p.directReports.length > 0 && (
+        <p className="mt-1 text-xs text-gray-600">Direct reports: {p.directReports.map((d) => d.fullName).join(", ")}</p>
+      )}
+      {p.canManage && (
+        <form onSubmit={save} className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="text-xs text-gray-600">Change who this person reports to
+            <select className={`${inputCls} w-72`} value={to} onChange={(e) => setTo(e.target.value)}>
+              <option value="">The Director (default)</option>
+              {p.reportsToOptions.map((o) => <option key={o.id} value={o.id}>{o.fullName} · {o.designation}</option>)}
+            </select>
+          </label>
+          <button disabled={busy} className="rounded-md bg-kenya-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : "Save"}</button>
+          {error && <p className="w-full text-sm text-red-600">{error}</p>}
+        </form>
       )}
     </section>
   );
@@ -184,7 +217,7 @@ function TransferPanel({ p, onSaved }) {
               <p className="font-medium">Transfer waiting for a decision</p>
               <p className="mt-1">{t.open.fromStation} → {t.open.toStation} · merit {t.open.meritScore}/100</p>
               <p className="mt-1 text-xs text-gray-600">{t.open.justification}</p>
-              <p className="mt-1 text-xs text-gray-500">{t.open.toLevel === "MINISTRY" ? "The National Admin decides this one." : "The county Director (or the National Admin) decides this one."} Decisions are made under <Link href="/staff-directory" className="underline">Transfers</Link>.</p>
+              <p className="mt-1 text-xs text-gray-500">The Director's decision is final. Decide under <Link href="/staff-directory" className="underline">Transfers</Link>.</p>
               <button onClick={cancel} className="mt-2 text-xs font-medium text-kenya-red hover:underline">Cancel this proposal</button>
             </div>
           ) : t.canPropose ? (
@@ -207,7 +240,7 @@ function TransferPanel({ p, onSaved }) {
               {error && <p className="text-sm text-red-600 sm:col-span-2">{error}</p>}
               <div className="sm:col-span-2"><button disabled={busy} className="rounded-md bg-kenya-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Sending…" : "Propose transfer"}</button></div>
             </form>
-          ) : <p className="mt-3 text-xs text-gray-500">You can view the merit score here, but only someone responsible for this person can propose a transfer.</p>}
+          ) : <p className="mt-3 text-xs text-gray-500">Only the Director or the National Admin can propose a transfer.</p>}
         </>
       )}
       {p.transfers.filter((x) => x.status !== "PROPOSED").length > 0 && (

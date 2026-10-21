@@ -477,13 +477,15 @@ regression (all passing), and schema-validated with Prisma's own validator.
 
 ## Staff Directory, Status & Transfer Merit (Module 11)
 
-A register of ministry/county staff, **separate from login accounts** (no accounts or reporting lines are created by it).
+A confidential register of ministry/county staff, **visible to the Director (own county) and the National Admin only**. It is separate from login accounts (none are created by it).
 
-- **Profile** (P/No, job group, age, duty station, phone, email, year employed, qualifications) with a **Current status** panel below it: *Active at the office*, *Fieldwork* or *On leave*, with an optional end date (it shows as "at office" again once the date passes) and a history.
-- **Transfers** go up one level at a time: sub-county office -> county office -> Ministry. Sub-county -> county is decided by the county Director (or National Admin, never the proposer); county -> Ministry by the National Admin only. A rejection needs a reason; one open proposal per person.
-- **Merit score (0-100):** years of service 30 (1.5 per year, capped at 20 years) + qualifications 25 + job group 25 + appraisal 20 (entered by the proposer). Ranking tab lists staff by merit per route. The formula lives in `backend/src/utils/transferMerit.js`.
-- **Visibility:** National Admin all; Director their county; Sub-County Officer their sub-county. `Remarks` (e.g. disability notes) is shown only to Director and National Admin. Staff details are personal data under the Data Protection Act 2019.
-- **Loading the roster:** Staff Directory -> **Load staff roster** (Director/National Admin). Non-destructive: creates missing people, fills blanks only, never touches status or transfers. The sheet's password column is deliberately NOT imported.
+- **Profile** (P/No, job group, age, duty station, phone, email, year employed, qualifications) with a **Current status** panel below it: *Active at the office*, *Fieldwork* or *On leave*, optional end date (shows as "at office" again once it passes) and a history.
+- **Reporting lines:** everyone reports to the Director by default. The Director decides who reports to whom (profile -> Reporting line, or the sheet). Loops are refused. If someone moves to the Ministry their juniors revert to the Director. The National Admin can override.
+- **Transfers** go up one level at a time: sub-county office -> county office -> Ministry. **The Director's decision is final** (no admin approval). The National Admin can override a decision (undo an approved move, or approve a rejected one) with a recorded reason; this restores or applies the posting and is audited.
+- **Merit score (0-100):** years of service 30 (1.5 per year, capped at 20 years) + qualifications 25 + job group 25 + appraisal 20 (entered by the proposer). Merit ranking tab lists staff per route. Formula: `backend/src/utils/transferMerit.js`.
+- **Excel sheet:** Staff Directory -> **Download staff sheet** gives an .xlsx of everyone (editable white columns, grey read-only ones, and a "Read me" tab). Edit it and **Upload staff sheet**; changes are reflected. Rules: P/No identifies the person (unknown P/No = new person); blank cells change nothing; nobody is deleted (set Active to No); if any row has a problem nothing is saved and the rows to fix are listed; the Director can't post to the Ministry from the sheet (National Admin can). Passwords are never in the sheet. Keep downloaded copies private.
+- **First load:** **Load staff roster** loads the bundled Embu roster once (adds missing people, fills blanks only, never overwrites).
+- `Remarks` (e.g. disability notes) is part of the sheet and profile, but only the Director and National Admin ever see this module. Staff details are personal data under the Data Protection Act 2019.
 
 ## Open Items From Scope (to confirm with County before Phase 2)
 

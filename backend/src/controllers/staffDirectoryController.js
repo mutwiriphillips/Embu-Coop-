@@ -11,19 +11,17 @@ const MINISTRY_STATION = "State Department for Co-operatives (Ministry headquart
 
 const isSenior = (u) => ["NATIONAL_ADMIN", "DIRECTOR"].includes(u.role);
 
-/** Which directory records a signed-in user may see. */
+/** Staff information is for the Director (own county) and the National Admin only. */
 function scopeWhere(user) {
   if (user.role === "NATIONAL_ADMIN") return {};
   if (user.role === "DIRECTOR") return { countyId: user.countyId };
-  if (user.role === "SUBCOUNTY_OFFICER") return user.subCountyId ? { countyId: user.countyId, subCountyId: user.subCountyId } : { countyId: user.countyId };
   return { id: "none" };
 }
 
-/** May this user change this person's status / propose a transfer for them? */
+/** The Director runs their county's staff; the National Admin can override anywhere. */
 function canManage(user, s) {
   if (user.role === "NATIONAL_ADMIN") return true;
   if (user.role === "DIRECTOR") return s.countyId === user.countyId;
-  if (user.role === "SUBCOUNTY_OFFICER") return Boolean(s.subCountyId) && s.subCountyId === user.subCountyId;
   return false;
 }
 /** Editing the profile itself is for Director / National Admin only. */
@@ -82,8 +80,13 @@ async function getOne(req, res) {
   ]);
   const open = transfers.find((t) => t.status === "PROPOSED") || null;
   const next = NEXT_LEVEL[s.dutyLevel] || null;
+  const colleagues = s.countyId ? await prisma.staffMember.findMany({ where: { countyId: s.countyId, active: true }, orderBy: { serialNo: "asc" } }) : [];
+  const brief = (x) => ({ id: x.id, fullName: x.fullName, designation: x.designation });
   res.json({
     ...toPublic(s, req.user),
+    reportsTo: s.reportsToId ? brief(colleagues.find((x) => x.id === s.reportsToId) || { id: s.reportsToId, fullName: "(not in this county)", designation: "" }) : null,
+    directReports: colleagues.filter((x) => x.reportsToId === s.id).map(brief),
+    reportsToOptions: canManage(req.user, s) ? colleagues.filter((x) => x.id !== s.id).map(brief) : [],
     history,
     transfers,
     transfer: {
@@ -161,8 +164,7 @@ async function propose(req, res) {
   if (!canManage(req.user, s)) throw httpError(403, "You can't propose a transfer for this person");
   const toLevel = NEXT_LEVEL[s.dutyLevel];
   if (!toLevel) throw httpError(409, "This person is already at the Ministry; there is no higher level to transfer to");
-  if (req.user.role === "SUBCOUNTY_OFFICER" && toLevel === "MINISTRY") throw httpError(403, "Only a Director or the National Admin can propose a transfer to the Ministry");
-  const d = proposeSchema.parse(req.body);
+    const d = proposeSchema.parse(req.body);
   const open = await prisma.staffTransfer.findFirst({ where: { staffId: s.id, status: "PROPOSED" } });
   if (open) throw httpError(409, "There is already a transfer waiting for a decision for this person");
   const toStation = toLevel === "MINISTRY" ? MINISTRY_STATION : d.toStation;
@@ -172,7 +174,7 @@ async function propose(req, res) {
   const merit = computeMerit(s, { appraisal: d.appraisalScore ?? null });
   const t = await prisma.staffTransfer.create({
     data: {
-      staffId: s.id, fromLevel: s.dutyLevel, toLevel, fromStation: s.dutyStation, toStation,
+      staffId: s.id, fromLevel: s.dutyLevel, toLevel, fromStation: s.dutyStation, toStation, fromCountyId: s.countyId, fromSubCountyId: s.subCountyId,
       meritScore: merit.total, meritBreakdown: merit, appraisalScore: d.appraisalScore ?? null,
       justification: d.justification, effectiveDate, requestedBy: req.user.id,
     },
@@ -181,11 +183,20 @@ async function propose(req, res) {
   res.status(201).json(t);
 }
 
-/** Who may decide a transfer. County->Ministry: National Admin only. Sub-county->County: Director of that county or National Admin; never the proposer (except National Admin). */
+/** The county Director's decision is final (both sub-county -> county and county -> Ministry).
+ *  The National Admin can also decide, and can override a decision (see override). */
 function mayDecide(user, t, staff) {
   if (user.role === "NATIONAL_ADMIN") return true;
-  if (t.toLevel === "MINISTRY") return false;
-  return user.role === "DIRECTOR" && staff.countyId === user.countyId && t.requestedBy !== user.id;
+  return user.role === "DIRECTOR" && staff.countyId === user.countyId;
+}
+
+/** Apply a transfer: new duty station and level; a Ministry posting leaves the county's staff list and its juniors go back to the Director. */
+async function applyMove(t, staff) {
+  await prisma.staffMember.update({
+    where: { id: staff.id },
+    data: { dutyStation: t.toStation, dutyLevel: t.toLevel, subCountyId: null, countyId: t.toLevel === "MINISTRY" ? null : staff.countyId, ...(t.toLevel === "MINISTRY" ? { reportsToId: null } : {}) },
+  });
+  if (t.toLevel === "MINISTRY") await prisma.staffMember.updateMany({ where: { reportsToId: staff.id }, data: { reportsToId: null } });
 }
 
 const decisionSchema = z.object({ decision: z.enum(["APPROVE", "REJECT"]), note: z.string().trim().max(300).optional().or(z.literal("")) });
@@ -199,24 +210,67 @@ async function decide(req, res) {
   if (!visible) throw httpError(403, "This transfer is outside your area");
   if (t.status !== "PROPOSED") throw httpError(409, "This transfer has already been decided");
   if (!mayDecide(req.user, t, staff)) {
-    throw httpError(403, t.toLevel === "MINISTRY" ? "Only the National Admin can approve a transfer to the Ministry" : "Only the county Director (not the person who proposed it) or the National Admin can decide this transfer");
+    throw httpError(403, "Only the county Director (or the National Admin) can decide this transfer");
   }
   const d = decisionSchema.parse(req.body);
   if (d.decision === "REJECT" && !d.note) throw httpError(400, "Give a reason for rejecting the transfer");
   const now = new Date();
-  if (d.decision === "APPROVE") {
-    // Apply the move: new duty station and level; a Ministry posting leaves the county's staff list.
-    await prisma.staffMember.update({
-      where: { id: staff.id },
-      data: { dutyStation: t.toStation, dutyLevel: t.toLevel, subCountyId: null, countyId: t.toLevel === "MINISTRY" ? null : staff.countyId },
-    });
-  }
+  if (d.decision === "APPROVE") await applyMove(t, staff);
   const done = await prisma.staffTransfer.update({
     where: { id: t.id },
     data: { status: d.decision === "APPROVE" ? "APPROVED" : "REJECTED", decidedBy: req.user.id, decidedAt: now, decisionNote: d.note || null },
   });
   await recordAudit({ userId: req.user.id, action: d.decision === "APPROVE" ? "STAFF_TRANSFER_APPROVED" : "STAFF_TRANSFER_REJECTED", entityType: "StaffTransfer", entityId: t.id, metadata: { staffId: staff.id } });
   res.json(done);
+}
+
+const overrideSchema = z.object({ decision: z.enum(["APPROVE", "REJECT"]), note: z.string().trim().min(5, "Give the reason for the override").max(300) });
+
+// POST /api/staff-directory/transfers/:tid/override   (National Admin only)
+// Reverses a decision the Director already made: approve a rejected transfer, or undo an approved one.
+async function override(req, res) {
+  const t = await prisma.staffTransfer.findUnique({ where: { id: req.params.tid } });
+  if (!t) throw httpError(404, "Transfer not found");
+  if (!["APPROVED", "REJECTED"].includes(t.status)) throw httpError(409, "Only a decided transfer can be overridden");
+  const d = overrideSchema.parse(req.body);
+  const wanted = d.decision === "APPROVE" ? "APPROVED" : "REJECTED";
+  if (t.status === wanted) throw httpError(409, `This transfer is already ${wanted.toLowerCase()}`);
+  const staff = await prisma.staffMember.findUnique({ where: { id: t.staffId } });
+  if (d.decision === "APPROVE") {
+    if (staff.dutyStation !== t.fromStation) throw httpError(409, "This person has moved since; the transfer can't be applied now");
+    await applyMove(t, staff);
+  } else {
+    if (staff.dutyStation !== t.toStation) throw httpError(409, "This person has moved since; the transfer can't be undone now");
+    await prisma.staffMember.update({ where: { id: staff.id }, data: { dutyStation: t.fromStation, dutyLevel: t.fromLevel, countyId: t.fromCountyId ?? staff.countyId, subCountyId: t.fromSubCountyId ?? null } });
+  }
+  const done = await prisma.staffTransfer.update({ where: { id: t.id }, data: { status: wanted, overriddenBy: req.user.id, overriddenAt: new Date(), decisionNote: d.note } });
+  await recordAudit({ userId: req.user.id, action: "STAFF_TRANSFER_OVERRIDDEN", entityType: "StaffTransfer", entityId: t.id, metadata: { staffId: staff.id, now: wanted } });
+  res.json(done);
+}
+
+// ---- reporting lines --------------------------------------------------------
+// Default: everyone reports to the Director (reportsToId = null). The Director decides who reports to whom.
+const reportsSchema = z.object({ reportsToId: z.string().uuid().nullable() });
+
+// PUT /api/staff-directory/:id/reports-to
+async function setReportsTo(req, res) {
+  const s = await load(req);
+  if (!canManage(req.user, s)) throw httpError(403, "You can't change who this person reports to");
+  const { reportsToId } = reportsSchema.parse(req.body);
+  if (reportsToId) {
+    if (reportsToId === s.id) throw httpError(400, "Someone can't report to themselves");
+    const boss = await prisma.staffMember.findUnique({ where: { id: reportsToId } });
+    if (!boss || !boss.active || boss.countyId !== s.countyId || !s.countyId) throw httpError(400, "Choose an active colleague in the same county");
+    // no loops: walk up from the new boss
+    let cur = boss, hops = 0;
+    while (cur && cur.reportsToId && hops++ < 50) {
+      if (cur.reportsToId === s.id) throw httpError(400, "That would make a loop: they already report (directly or not) to this person");
+      cur = await prisma.staffMember.findUnique({ where: { id: cur.reportsToId } });
+    }
+  }
+  const updated = await prisma.staffMember.update({ where: { id: s.id }, data: { reportsToId: reportsToId || null } });
+  await recordAudit({ userId: req.user.id, action: "STAFF_REPORTING_LINE_CHANGED", entityType: "StaffMember", entityId: s.id, metadata: { toDirector: !reportsToId } });
+  res.json(toPublic(updated, req.user));
 }
 
 // POST /api/staff-directory/transfers/:tid/cancel
@@ -239,7 +293,7 @@ async function listTransfers(req, res) {
   res.json(
     all.filter((t) => byId.has(t.staffId)).map((t) => {
       const s = byId.get(t.staffId);
-      return { ...t, staffName: s.fullName, staffDesignation: s.designation, canDecide: t.status === "PROPOSED" && mayDecide(req.user, t, s) };
+      return { ...t, staffName: s.fullName, staffDesignation: s.designation, canDecide: t.status === "PROPOSED" && mayDecide(req.user, t, s), canOverride: req.user.role === "NATIONAL_ADMIN" && ["APPROVED", "REJECTED"].includes(t.status) };
     })
   );
 }
@@ -291,4 +345,4 @@ async function importRoster(req, res) {
   res.json({ ...result, total: ROSTER.length });
 }
 
-module.exports = { list, getOne, setStatus, edit, propose, decide, cancel, listTransfers, meritRanking, importRoster, effectiveStatus, scopeWhere };
+module.exports = { COUNTY_OFFICES, MINISTRY_STATION, STATUS_LABEL, override, setReportsTo, list, getOne, setStatus, edit, propose, decide, cancel, listTransfers, meritRanking, importRoster, effectiveStatus, scopeWhere };

@@ -406,5 +406,5 @@ Not covered: anything entered after the last backup. That is why the nightly cop
 - If it is still slow, open the backend's Render logs: a line `[counties] slow county load: N ms` means the database itself is slow (free Postgres is small and far away); check that the backend and database are in the **same region** and that `DATABASE_URL` is the *Internal* URL.
 
 ## Staff Directory (after deploying this version)
-1. The new tables are additive; the normal `prisma db push` on deploy creates them (no data-loss flag needed).
-2. Sign in as Director or National Admin -> **Staff Directory** -> **Load staff roster** once (the free tier has no shell). Re-pressing it is safe.
+1. The new tables/columns are additive; the normal `prisma db push` on deploy creates them (no data-loss flag needed). The backend now also depends on `exceljs` (installed by `npm install` on deploy).
+2. Sign in as Director or National Admin -> **Staff Directory** -> **Load staff roster** once (the free tier has no shell). From then on use **Download staff sheet / Upload staff sheet** to edit in Excel.

@@ -265,8 +265,11 @@ the Governor's office, not an assumption.
 **Last run:** `_______________` **By:** `_______________` **Result:** ☐ Clean ☐ Issues found (listed above)
 
 ## Staff Directory
-- [ ] Director sees "Staff Directory" in the sidebar; field officers do not.
+- [ ] Only Director / National Admin see "Staff Directory" in the sidebar; a Sub-County Officer or Field Officer gets 403 on the API.
 - [ ] "Load staff roster" loads 25 people; pressing it again adds none.
-- [ ] Open a profile; set Fieldwork / On leave with an end date; the badge and list tiles update.
-- [ ] Propose a sub-county -> county transfer; Director approves under Transfers; duty station changes.
-- [ ] Remarks is visible to Director/National Admin only.
+- [ ] Download staff sheet opens in Excel; change a phone number, Upload staff sheet -> "1 updated"; the profile shows it.
+- [ ] Upload a sheet with a bad phone number -> nothing saved, the row is listed.
+- [ ] Profile: set Fieldwork / On leave with an end date; badge and list tiles update.
+- [ ] Profile -> Reporting line: set a junior to report to someone; "Direct reports" appears on the senior's profile.
+- [ ] Director proposes and approves a transfer (both levels); the duty station changes with no admin step.
+- [ ] National Admin: Transfers -> Approved -> Override (with a reason) puts the person back.
