@@ -6,6 +6,7 @@ import ProtectedRoute from "../../../components/ProtectedRoute";
 import api from "../../../lib/api";
 import PdfListImport, { uploadSupportingPdf } from "../../../components/PdfListImport";
 import { useAuth } from "../../../context/AuthContext";
+import { LEVELS } from "../../../components/ComplianceBadge";
 import { AuthedImage, openFile, useFileList, ACCEPT, HINT, formatBytes } from "../../../lib/files";
 
 // Documents and AGM papers store their file as "file:<id>" in storageKey.
@@ -33,48 +34,58 @@ function Field({ label, hint, className = "", children }) {
   );
 }
 
-// Date on the Certificate of Registration. Shown to everyone; county staff
-// can set or correct it (a Cooperative Manager cannot, as with the reg. number).
+// Registration details: number and date on the Certificate of Registration.
+// County staff can set or correct them (a Cooperative Manager cannot). Societies
+// loaded in bulk start without either; they are added here (or in the sheet).
 function RegistrationDate({ coop, onSaved }) {
   const { user } = useAuth();
   const canEdit = user?.role && user.role !== "COOPERATIVE_MANAGER";
   const [editing, setEditing] = useState(false);
+  const [number, setNumber] = useState("");
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function save(e) {
     e.preventDefault();
-    if (!value) return setError("Pick the date of registration");
+    const body = {};
+    if (number.trim() && number.trim() !== (coop.registrationNumber || "")) body.registrationNumber = number.trim();
+    if (value) body.registrationDate = value;
+    if (!Object.keys(body).length) return setError("Enter the registration number and/or the date");
     setBusy(true);
     setError("");
     try {
-      await api.patch(`/cooperatives/${coop.id}`, { registrationDate: value });
+      await api.patch(`/cooperatives/${coop.id}`, body);
       setEditing(false);
       onSaved();
     } catch (err) {
-      setError(err?.response?.data?.error || "Could not save the date");
+      setError(err?.response?.data?.error || "Could not save");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="mb-6 text-sm text-gray-500">
+    <div className="mb-4 text-sm text-gray-500">
       {!editing ? (
         <>
+          Reg. no.: <span className="text-gray-800">{coop.registrationNumber || "not recorded"}</span>
+          <span className="mx-2">·</span>
           Registered: <span className="text-gray-800">{coop.registrationDate ? fmtDate(coop.registrationDate) : "date not recorded"}</span>
           {canEdit && (
             <button
-              onClick={() => { setValue(toInputDate(coop.registrationDate)); setEditing(true); }}
+              onClick={() => { setNumber(coop.registrationNumber || ""); setValue(toInputDate(coop.registrationDate)); setEditing(true); }}
               className="ml-2 text-xs text-kenya-green hover:underline"
             >
-              {coop.registrationDate ? "Edit" : "Add date"}
+              {coop.registrationNumber && coop.registrationDate ? "Edit" : "Add registration details"}
             </button>
           )}
         </>
       ) : (
         <form onSubmit={save} className="flex flex-wrap items-center gap-2">
+          <span>Reg. no.:</span>
+          <input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="e.g. CS/12345" maxLength={40}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900" />
           <span>Registered:</span>
           <input type="date" min="1900-01-01" max={todayInput()} value={value} onChange={(e) => setValue(e.target.value)}
             className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900" />
@@ -84,6 +95,36 @@ function RegistrationDate({ coop, onSaved }) {
         </form>
       )}
     </div>
+  );
+}
+
+// How complete this society's record is, and exactly what is still missing.
+const TAB_FOR = { Members: "Members", Documents: "Documents", Governance: "Governance", "Supervisory Board": "Supervisory Board", AGM: "AGM" };
+function CompliancePanel({ coop, onGo }) {
+  const c = coop.compliance;
+  if (!c) return null;
+  const l = LEVELS[c.level] || LEVELS.INCOMPLETE;
+  return (
+    <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="text-sm font-semibold">Compliance</h2>
+        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${l.cls}`}>{l.label} · {c.percent}%</span>
+        <span className="text-xs text-gray-500">{c.done} of {c.total} items on file</span>
+      </div>
+      <div className="mt-2 h-1.5 rounded bg-gray-100"><div className={`h-1.5 rounded ${l.bar}`} style={{ width: `${c.percent}%` }} /></div>
+      <ul className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+        {c.items.map((i) => (
+          <li key={i.key} className={`flex items-start gap-2 ${i.done ? "text-gray-500" : "text-gray-900"}`}>
+            <span className={`mt-0.5 inline-block h-4 w-4 shrink-0 rounded-full text-center text-[10px] leading-4 text-white ${i.done ? "bg-green-600" : "bg-red-500"}`}>{i.done ? "✓" : "!"}</span>
+            <span>
+              {i.label}
+              {!i.done && TAB_FOR[i.where] && <button onClick={() => onGo(TAB_FOR[i.where])} className="ml-2 text-xs font-medium text-kenya-green hover:underline">Add in {i.where}</button>}
+              {!i.done && !TAB_FOR[i.where] && <span className="ml-2 text-xs text-gray-400">{i.where === "Registration details" ? "use Add registration details above" : i.where}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -123,9 +164,10 @@ export default function CooperativeDetailPage() {
       <div className="mb-1 text-xs font-medium uppercase text-kenya-gold">{coop.valueChain}</div>
       <h1 className="mb-1 text-2xl font-bold">{coop.name}</h1>
       <p className="mb-1 text-sm text-gray-500">
-        {coop.registrationNumber} · {coop.county?.name ? `${coop.county.name} County · ` : ""}{coop.subCounty} / {coop.ward}
+        {coop.county?.name ? `${coop.county.name} County · ` : ""}{coop.subCounty} / {coop.ward}
       </p>
       <RegistrationDate coop={coop} onSaved={reload} />
+      <CompliancePanel coop={coop} onGo={setTab} />
 
       <div className="mb-6 flex gap-2 overflow-x-auto whitespace-nowrap border-b border-gray-200">
         {(ASSET_TRACKED_VALUE_CHAINS.includes(coop.valueChain)
@@ -258,7 +300,7 @@ const DOC_LABELS = {
 const DOC_TYPES = Object.keys(DOC_LABELS);
 const REVIEW_ROLES = ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"];
 const APPROVE_ROLES = ["NATIONAL_ADMIN", "DIRECTOR"];
-const certTitle = (coop) => `Certificate of Registration ${coop.registrationNumber}`;
+const certTitle = (coop) => `Certificate of Registration${coop.registrationNumber ? ` ${coop.registrationNumber}` : ""}`;
 
 function DocumentsTab({ coop, onChange }) {
   const { user } = useAuth();

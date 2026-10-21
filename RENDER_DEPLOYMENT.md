@@ -408,3 +408,7 @@ Not covered: anything entered after the last backup. That is why the nightly cop
 ## Staff Directory (after deploying this version)
 1. The new tables/columns are additive; the normal `prisma db push` on deploy creates them (no data-loss flag needed). The backend now also depends on `exceljs` (installed by `npm install` on deploy).
 2. Sign in as Director or National Admin -> **Staff Directory** -> **Load staff roster** once (the free tier has no shell). From then on use **Download staff sheet / Upload staff sheet** to edit in Excel.
+
+## Cooperatives list (after deploying this version)
+1. The change is additive (societies may now have no registration number; `societyType` already exists). The normal `prisma db push` is enough.
+2. Sign in as Director or National Admin -> **Cooperatives** -> **Load Embu county list** once (or **Upload cooperatives sheet** with the County's spreadsheet). Loading again is safe.

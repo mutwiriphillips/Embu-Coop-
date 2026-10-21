@@ -2,6 +2,7 @@ const express = require("express");
 const { authenticate, requireRole, requirePermission, requireCooperativeAccess } = require("../middleware/auth");
 const ctrl = require("../controllers/cooperativeController");
 const importCtrl = require("../controllers/importController");
+const sheetCtrl = require("../controllers/cooperativeSheetController");
 const { upload } = require("../utils/fileStorage");
 
 const router = express.Router();
@@ -15,6 +16,12 @@ router.get("/", requirePermission("cooperatives", "canView"), ctrl.listCooperati
 // "cooperatives: canEdit" so they can run their own society, which used to
 // let them create new cooperatives too; requireRole now keeps this to staff.
 router.post("/", requireRole("NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER", "FIELD_OFFICER"), requirePermission("cooperatives", "canEdit"), ctrl.createCooperative);
+
+// Excel sheet and bundled-list load: Director and National Admin only. These must
+// sit before the /:id routes.
+router.get("/sheet", requireRole("NATIONAL_ADMIN", "DIRECTOR"), sheetCtrl.download);
+router.post("/sheet", requireRole("NATIONAL_ADMIN", "DIRECTOR"), sheetCtrl.uploadSheet);
+router.post("/import-roster", requireRole("NATIONAL_ADMIN", "DIRECTOR"), sheetCtrl.importRoster);
 
 // Every route below references a specific cooperative — enforce ownership.
 router.get("/:id", requireCooperativeAccess(), requirePermission("cooperatives", "canView"), ctrl.getCooperative);

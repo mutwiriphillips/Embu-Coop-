@@ -37,33 +37,34 @@ const READ_ME = [
   "CONFIDENTIAL: this sheet holds staff personal data (and a restricted Remarks column). Share it with nobody outside the Director and National Admin; delete downloaded copies when done.",
 ];
 
-async function buildWorkbook(rows) {
+async function buildWorkbook(rows, cfg = {}) {
+  const columns = cfg.columns || COLUMNS, textKeys = cfg.textKeys || TEXT_KEYS, sheetName = cfg.sheetName || "Staff", readMe = cfg.readMe || READ_ME, freeze = cfg.freeze === undefined ? 3 : cfg.freeze;
   const wb = new ExcelJS.Workbook();
   wb.creator = "Embu Cooperative Management System";
-  const ws = wb.addWorksheet("Staff", { views: [{ state: "frozen", ySplit: 1, xSplit: 3 }] });
-  ws.columns = COLUMNS.map((c) => ({ header: c.header, key: c.key, width: c.width }));
-  COLUMNS.forEach((c, i) => {
+  const ws = wb.addWorksheet(sheetName, { views: [{ state: "frozen", ySplit: 1, xSplit: freeze }] });
+  ws.columns = columns.map((c) => ({ header: c.header, key: c.key, width: c.width }));
+  columns.forEach((c, i) => {
     const col = ws.getColumn(i + 1);
-    if (TEXT_KEYS.has(c.key)) col.numFmt = "@";
+    if (textKeys.has(c.key)) col.numFmt = "@";
   });
   const head = ws.getRow(1);
   head.font = { bold: true, color: { argb: "FFFFFFFF" } };
-  COLUMNS.forEach((c, i) => {
+  columns.forEach((c, i) => {
     head.getCell(i + 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: c.edit ? "FF006600" : "FF6B7280" } };
     head.getCell(i + 1).alignment = { vertical: "middle", wrapText: true };
   });
   head.height = 30;
   for (const r of rows) {
     const row = ws.addRow(r);
-    COLUMNS.forEach((c, i) => {
+    columns.forEach((c, i) => {
       const cell = row.getCell(i + 1);
-      if (TEXT_KEYS.has(c.key) && cell.value != null) cell.value = String(cell.value);
+      if (textKeys.has(c.key) && cell.value != null) cell.value = String(cell.value);
       if (!c.edit) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
     });
   }
   const guide = wb.addWorksheet("Read me");
   guide.getColumn(1).width = 140;
-  READ_ME.forEach((t, i) => { const c = guide.getCell(i + 1, 1); c.value = t; c.alignment = { wrapText: true }; if (i === 0) c.font = { bold: true, size: 14 }; });
+  readMe.forEach((t, i) => { const c = guide.getCell(i + 1, 1); c.value = t; c.alignment = { wrapText: true }; if (i === 0) c.font = { bold: true, size: 14 }; });
   return wb;
 }
 
@@ -83,24 +84,27 @@ function cellText(v) {
 }
 
 /** Reads the sheet back into plain row objects keyed by COLUMNS keys (only editable columns). */
-async function readWorkbook(buffer) {
+async function readWorkbook(buffer, cfg = {}) {
+  const columns = cfg.columns || COLUMNS, sheetName = cfg.sheetName || "Staff";
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
-  const ws = wb.getWorksheet("Staff") || wb.worksheets[0];
+  const ws = wb.getWorksheet(sheetName) || wb.worksheets[0];
   if (!ws) throw new Error("No sheet found");
+  const nk = (t) => String(t).toLowerCase().replace(/[^a-z0-9]/g, "");
   const idx = {};
-  ws.getRow(1).eachCell((cell, n) => { idx[cellText(cell.value).toLowerCase()] = n; });
-  const need = COLUMNS.filter((c) => c.edit).map((c) => c.header);
-  const missing = need.filter((h) => !idx[h.toLowerCase()]);
+  ws.getRow(1).eachCell((cell, n) => { idx[nk(cellText(cell.value))] = n; });
+  const colIdx = (c) => [c.header, ...(c.aliases || [])].map(nk).map((k) => idx[k]).find(Boolean);
+  const missing = columns.filter((c) => c.edit && !c.optional && !colIdx(c)).map((c) => c.header);
   if (missing.length) { const e = new Error(`These columns are missing from row 1: ${missing.join(", ")}`); e.userFacing = true; throw e; }
   const out = [];
   ws.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
     const rec = { _row: rowNumber };
     let any = false;
-    for (const c of COLUMNS) {
+    for (const c of columns) {
       if (!c.edit) continue;
-      rec[c.key] = cellText(row.getCell(idx[c.header.toLowerCase()]).value);
+      const at = colIdx(c);
+      rec[c.key] = at ? cellText(row.getCell(at).value) : "";
       if (rec[c.key]) any = true;
     }
     if (any) out.push(rec);

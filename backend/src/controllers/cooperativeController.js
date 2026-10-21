@@ -6,6 +6,7 @@ const { assertBelongs } = require("../utils/ownership");
 const { resetToTemporary } = require("../utils/accountPassword");
 const { withLiveStatus } = require("../utils/governance");
 const { optionalDate, phoneSchema, nationalIdSchema } = require("../utils/validators");
+const { complianceFor } = require("../utils/cooperativeCompliance");
 
 // Two societies can't share a name in one county (the Registrar doesn't allow
 // it), and two entries with the same name are almost always an accidental
@@ -15,7 +16,7 @@ async function assertNameAndNumberFree({ countyId, name, registrationNumber, exc
     const sameCounty = await prisma.cooperative.findMany({ where: { countyId }, select: { id: true, name: true, registrationNumber: true } });
     const twin = sameCounty.find((c) => c.id !== exceptId && norm(c.name) === norm(name));
     if (twin) {
-      throw httpError(409, `A cooperative named "${twin.name}" (reg. no. ${twin.registrationNumber}) is already registered in this county. Open that record instead of registering it again.`);
+      throw httpError(409, `A cooperative named "${twin.name}" ${twin.registrationNumber ? `(reg. no. ${twin.registrationNumber}) ` : ""}is already registered in this county. Open that record instead of registering it again.`);
     }
   }
   if (registrationNumber !== undefined) {
@@ -34,7 +35,10 @@ const VALUE_CHAINS = [
 
 const coopSchema = z.object({
   name: z.string().trim().min(1),
-  registrationNumber: z.string().trim().min(1),
+  // Mass-loaded societies start without one; it is added when known. Blank means "not recorded".
+  registrationNumber: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().trim().min(1).optional()),
+  // The type exactly as the County lists it (e.g. "NYS SACCO"); valueChain is the broad group.
+  societyType: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().trim().min(2).max(60).optional()),
   // Date on the Certificate of Registration. Optional in the API so existing
   // societies keep working until it is filled in.
   registrationDate: optionalDate("Date of registration"),
@@ -92,7 +96,9 @@ async function listCooperatives(req, res) {
     orderBy: { name: "asc" },
   });
 
-  res.json(cooperatives);
+  // Compliance indicator (how complete each record is), gathered in a few queries.
+  const compliance = await complianceFor(prisma, cooperatives);
+  res.json(cooperatives.map((c) => { const k = compliance.get(c.id); return { ...c, compliance: { level: k.level, percent: k.percent, done: k.done, total: k.total, missing: k.missing } }; }));
 }
 
 // A society can't have been registered tomorrow.
@@ -114,7 +120,8 @@ async function getCooperative(req, res) {
   });
   // Committee status is recomputed from today's date (the stored value goes
   // stale as terms run out), and the committee in force is marked current.
-  res.json({ ...coop, committees: withLiveStatus(coop.committees) });
+  const [compliance] = [(await complianceFor(prisma, [coop])).get(coop.id)];
+  res.json({ ...coop, committees: withLiveStatus(coop.committees), compliance });
 }
 
 async function createCooperative(req, res) {
@@ -152,7 +159,7 @@ async function createCooperative(req, res) {
 // society's name, sub-county and ward, but not its county (which decides who
 // oversees it), registration number, value chain (which drives credit
 // scoring), or who its manager is.
-const STAFF_ONLY_COOP_FIELDS = ["countyId", "registrationNumber", "registrationDate", "valueChain", "managerId"];
+const STAFF_ONLY_COOP_FIELDS = ["countyId", "registrationNumber", "registrationDate", "valueChain", "societyType", "managerId"];
 
 async function updateCooperative(req, res) {
   const data = coopSchema.partial().parse(req.body);
@@ -223,7 +230,7 @@ async function deleteCooperative(req, res) {
   const held = HOLDINGS.filter(([k]) => coop._count[k] > 0).map(([k, label]) => `${coop._count[k]} ${label}${coop._count[k] === 1 ? "" : "s"}`);
   if (files > 0) held.push(`${files} stored file${files === 1 ? "" : "s"}`);
   if (held.length) {
-    throw httpError(409, `${coop.name} (${coop.registrationNumber}) can't be deleted because it holds records: ${held.join(", ")}. Only a cooperative with nothing recorded under it (such as a duplicate registration) can be deleted.`);
+    throw httpError(409, `${coop.name}${coop.registrationNumber ? ` (${coop.registrationNumber})` : ""} can't be deleted because it holds records: ${held.join(", ")}. Only a cooperative with nothing recorded under it (such as a duplicate registration) can be deleted.`);
   }
   await prisma.cooperative.delete({ where: { id: coop.id } });
   await recordAudit({

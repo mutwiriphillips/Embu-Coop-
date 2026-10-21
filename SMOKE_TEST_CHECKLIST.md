@@ -273,3 +273,11 @@ the Governor's office, not an assumption.
 - [ ] Profile -> Reporting line: set a junior to report to someone; "Direct reports" appears on the senior's profile.
 - [ ] Director proposes and approves a transfer (both levels); the duty station changes with no admin step.
 - [ ] National Admin: Transfers -> Approved -> Override (with a reason) puts the person back.
+
+## Cooperatives: mass registration and compliance
+- [ ] Director/National Admin see the Excel buttons on Cooperatives; officers do not (API gives 403).
+- [ ] "Load Embu county list" adds 197 societies; pressing it again adds none. 4 are flagged for a ward that doesn't match.
+- [ ] Every society shows a compliance badge; the Incomplete tile filters the list.
+- [ ] Download cooperatives sheet, add a registration number and date, upload -> "1 updated"; the society's page shows it.
+- [ ] A sheet with a duplicate registration number or a bad date saves nothing and lists the rows.
+- [ ] On a society's page: the checklist shows what is missing, and adding a document/member/committee/AGM raises the score.

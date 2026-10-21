@@ -202,9 +202,12 @@ enum ValueChain {
 model Cooperative {
   id                 String     @id @default(uuid())
   name               String
-  registrationNumber String     @unique
+  // null until the Registrar's number is known (mass-loaded societies start without one; never invented)
+  registrationNumber String?    @unique
   registrationDate   DateTime?
   valueChain         ValueChain
+  // The society type exactly as the County lists it (e.g. "NYS SACCO", "BODA"); valueChain is the broad group used by scoring and reports.
+  societyType        String?
   countyId           String
   county             County     @relation(fields: [countyId], references: [id])
   subCounty          String

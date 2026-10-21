@@ -487,6 +487,16 @@ A confidential register of ministry/county staff, **visible to the Director (own
 - **First load:** **Load staff roster** loads the bundled Embu roster once (adds missing people, fills blanks only, never overwrites).
 - `Remarks` (e.g. disability notes) is part of the sheet and profile, but only the Director and National Admin ever see this module. Staff details are personal data under the Data Protection Act 2019.
 
+## Mass Registration of Cooperatives & Compliance Indicator (Module 12)
+
+Societies are registered in bulk with only what the County has (name, type, sub-county, ward); the rest is filled in society by society, and a **compliance indicator** shows how complete each record is.
+
+- **Excel sheet (Director and National Admin):** Cooperatives -> **Download cooperatives sheet** / **Upload cooperatives sheet**. A society is matched by its System ID, otherwise by name within the county; an unknown name is added. Blank cells change nothing, nothing is deleted, and if any row has a problem nothing is saved (the rows to fix are listed). The County's own spreadsheet (S/NO, County, Subcounty, WARD, NAME OF SOCIETY, TYPE OF SOCIETY) uploads as it is. Registration numbers are never invented: they stay blank ("Not yet recorded") until supplied, here or on the society's page.
+- **First load:** **Load Embu county list** loads the bundled 197 societies once (adds missing, fills blanks only). The type is kept exactly as the County lists it (e.g. "NYS SACCO", "BODA") and mapped to a broad value chain (used by scoring and reports).
+- **Ward matching:** wards are matched to the official IEBC list ("Runyenjes Central" = Central Ward). Where a ward does not belong to the stated sub-county (4 societies in the County list: Gaturi North listed under Manyatta) the text is kept as given, nothing is changed, and the society is flagged.
+- **Compliance indicator (10 items):** registration number; date of registration; sub-county and ward matched; certificate of registration uploaded; by-laws uploaded; member list; management committee; supervisory board; AGM in the last 12 months; audit report. A rejected document does not count. **Compliant** = all 10; **Partial** = 5 to 9; **Incomplete** = fewer than 5. It shows as a badge in the registry (with filter tiles), as a checklist on each society's page with links to where each missing item is added, and as columns in the sheet. Logic: `backend/src/utils/cooperativeCompliance.js`.
+- Cooperative-manager sign-in by registration number needs the number to be recorded first.
+
 ## Open Items From Scope (to confirm with County before Phase 2)
 
 See `docs/Embu_Coop_Engineering_Scope.pdf`, Section 6 — sub-county/ward list,

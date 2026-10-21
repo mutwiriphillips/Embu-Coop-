@@ -6,6 +6,7 @@ import ProtectedRoute from "../../components/ProtectedRoute";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../lib/api";
 import LocationPicker from "../../components/LocationPicker";
+import ComplianceBadge, { LEVELS } from "../../components/ComplianceBadge";
 
 const VALUE_CHAINS = [
   "COFFEE", "DAIRY", "MIRAA", "IRRIGATION", "TEA", "SUGARCANE", "COTTON",
@@ -33,6 +34,42 @@ export default function CooperativesPage() {
     wardId: "",
   });
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [problems, setProblems] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [level, setLevel] = useState("");
+  const canSheet = user?.role === "NATIONAL_ADMIN" || user?.role === "DIRECTOR";
+
+  async function downloadSheet() {
+    setError(""); setNotice("");
+    try {
+      const res = await api.get("/cooperatives/sheet", { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a"); a.href = url; a.download = "cooperatives-sheet.xlsx"; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch { setError("Could not download the sheet."); }
+  }
+  function summarise(r, what) {
+    const flagged = r.locationNotMatched?.length ? ` ${r.locationNotMatched.length} society name(s) have a ward that doesn't match the official list and are flagged: ${r.locationNotMatched.slice(0, 6).join(", ")}${r.locationNotMatched.length > 6 ? "…" : ""}.` : "";
+    return `${what}: ${r.created} added, ${r.updated} updated, ${r.unchanged} unchanged.${flagged}`;
+  }
+  async function uploadSheet(ev) {
+    const file = ev.target.files?.[0]; ev.target.value = "";
+    if (!file) return;
+    setBusy(true); setError(""); setNotice(""); setProblems([]);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const { data: r } = await api.post("/cooperatives/sheet", fd);
+      setNotice(summarise(r, "Sheet loaded")); load();
+    } catch (e) { const d = e?.response?.data; setError(d?.error || "Could not load the sheet."); setProblems(d?.errors || []); }
+    finally { setBusy(false); }
+  }
+  async function loadRoster() {
+    setBusy(true); setError(""); setNotice(""); setProblems([]);
+    try { const { data: r } = await api.post("/cooperatives/import-roster"); setNotice(summarise(r, "County list loaded") + " Nothing existing was overwritten."); load(); }
+    catch (e) { setError(e?.response?.data?.error || "Could not load the county list."); }
+    finally { setBusy(false); }
+  }
 
   useEffect(() => {
     api.get("/counties").then((res) => setCounties(res.data)).catch(() => {});
@@ -69,7 +106,7 @@ export default function CooperativesPage() {
 
   async function handleDelete(c) {
     const ok = window.confirm(
-      `Delete "${c.name}" (${c.registrationNumber})?\n\nThis only works for a cooperative with no members, documents, contributions or other records. It cannot be undone.`
+      `Delete "${c.name}"${c.registrationNumber ? ` (${c.registrationNumber})` : ""}?\n\nThis only works for a cooperative with no members, documents, contributions or other records. It cannot be undone.`
     );
     if (!ok) return;
     setError("");
@@ -105,16 +142,14 @@ export default function CooperativesPage() {
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
           <input
-            required
-            placeholder="Registration No."
+            placeholder="Registration No. (add later if not known)"
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={form.registrationNumber}
             onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
           />
           <label className="block text-xs text-gray-500">
-            Date of registration
+            Date of registration (optional)
             <input
-              required
               type="date"
               max={new Date().toISOString().slice(0, 10)}
               min="1900-01-01"
@@ -157,7 +192,34 @@ export default function CooperativesPage() {
         </form>
       )}
 
+      {notice && <p className="mb-3 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">{notice}</p>}
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {problems.length > 0 && (
+        <ul className="mb-3 max-h-48 list-disc space-y-0.5 overflow-auto rounded-md bg-red-50 py-2 pl-7 pr-3 text-xs text-red-800">
+          {problems.map((p, i) => <li key={i}>Row {p.row}{p.name ? ` (${p.name})` : ""}: {p.error}</li>)}
+        </ul>
+      )}
+      {canSheet && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-white p-3 text-sm">
+          <span className="text-gray-600">Register many in Excel:</span>
+          <button onClick={downloadSheet} className="rounded-md border border-kenya-green px-3 py-1.5 text-xs font-semibold text-kenya-green">Download cooperatives sheet</button>
+          <label className={`cursor-pointer rounded-md bg-kenya-green px-3 py-1.5 text-xs font-semibold text-white ${busy ? "opacity-50" : ""}`}>{busy ? "Loading…" : "Upload cooperatives sheet"}
+            <input type="file" accept=".xlsx" className="hidden" disabled={busy} onChange={uploadSheet} />
+          </label>
+          <button onClick={loadRoster} disabled={busy} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 disabled:opacity-50">Load Embu county list</button>
+          <span className="text-xs text-gray-500">Blank cells change nothing; nothing is deleted. Details like members, committee and documents are added on each society's page.</span>
+        </div>
+      )}
+      {cooperatives.length > 0 && (
+        <div className="mb-3 grid grid-cols-3 gap-2 text-center sm:max-w-xl">
+          {Object.entries(LEVELS).map(([k, l]) => (
+            <button key={k} onClick={() => setLevel(level === k ? "" : k)} className={`rounded-lg border bg-white p-2 ${level === k ? "border-kenya-green ring-1 ring-kenya-green" : "border-gray-200"}`}>
+              <span className="block text-xl font-bold">{cooperatives.filter((c) => c.compliance?.level === k).length}</span>
+              <span className={`inline-flex items-center gap-1 text-xs font-semibold ${l.cls} rounded-full px-2`}>{l.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-3">
         <input
@@ -205,7 +267,8 @@ export default function CooperativesPage() {
               <th className="px-4 py-2">Name</th>
               <th className="px-4 py-2">Reg. No.</th>
               <th className="px-4 py-2">Registered</th>
-              <th className="px-4 py-2">Value Chain</th>
+              <th className="px-4 py-2">Compliance</th>
+              <th className="px-4 py-2">Type</th>
               {isNationalAdmin && <th className="px-4 py-2">County</th>}
               <th className="px-4 py-2">Sub-County / Ward</th>
               <th className="px-4 py-2">Members</th>
@@ -214,16 +277,17 @@ export default function CooperativesPage() {
             </tr>
           </thead>
           <tbody>
-            {cooperatives.map((c) => (
+            {cooperatives.filter((c) => !level || c.compliance?.level === level).map((c) => (
               <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
                 <td className="px-4 py-2 font-medium">
                   <Link href={`/cooperatives/${c.id}`} className="text-kenya-green hover:underline">
                     {c.name}
                   </Link>
                 </td>
-                <td className="px-4 py-2 text-gray-600">{c.registrationNumber}</td>
+                <td className="px-4 py-2 text-gray-600">{c.registrationNumber || <span className="text-xs text-amber-700">Not yet recorded</span>}</td>
                 <td className="px-4 py-2 whitespace-nowrap text-gray-600">{c.registrationDate ? new Date(c.registrationDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }) : "—"}</td>
-                <td className="px-4 py-2">{c.valueChain}</td>
+                <td className="px-4 py-2"><ComplianceBadge compliance={c.compliance} /></td>
+                <td className="px-4 py-2">{c.societyType || c.valueChain}</td>
                 {isNationalAdmin && <td className="px-4 py-2">{c.county?.name}</td>}
                 <td className="px-4 py-2">{c.subCounty} / {c.ward}</td>
                 <td className="px-4 py-2">{c._count?.members ?? 0}</td>
@@ -239,7 +303,7 @@ export default function CooperativesPage() {
             ))}
             {cooperatives.length === 0 && (
               <tr>
-                <td colSpan={7 + (isNationalAdmin ? 1 : 0) + (canDelete ? 1 : 0)} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={8 + (isNationalAdmin ? 1 : 0) + (canDelete ? 1 : 0)} className="px-4 py-6 text-center text-gray-400">
                   {user?.role === "COOPERATIVE_MANAGER"
                     ? "Your account isn't linked to a cooperative yet. Ask your County Co-operative Office to assign you on the Staff & Access page."
                     : "No cooperatives found."}

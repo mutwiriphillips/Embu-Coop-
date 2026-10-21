@@ -69,7 +69,7 @@ async function syncReference(prisma) {
 }
 
 const MODELS = [
-  { key: "cooperative", label: "Cooperative", describe: (r) => `${r.name} (${r.registrationNumber})`, select: { name: true, registrationNumber: true } },
+  { key: "cooperative", label: "Cooperative", describe: (r) => (r.registrationNumber ? `${r.name} (${r.registrationNumber})` : r.name), select: { name: true, registrationNumber: true } },
   { key: "user", label: "Staff", describe: (r) => `${r.fullName} <${r.email}>`, select: { fullName: true, email: true } },
   { key: "agrovetShop", label: "Agrovet shop", describe: (r) => r.name, select: { name: true } },
 ];

@@ -93,3 +93,6 @@ These are for you and counsel to verify; I am not giving legal advice.
 
 ## Addendum: Staff Directory
 New personal data (names, phones, emails, P/No, and a restricted Remarks field that may hold disability information). The whole module and the Excel sheet are limited to the Director (own county) and National Admin; the sheet download is sent `no-store` and audited (row counts only). Uploads are validated in full before anything is written, accept only .xlsx up to 2 MB, and never contain passwords. Audit logs never store phone/ID/remarks values. The downloaded file itself is outside the system's control: keep it private and delete copies. The source spreadsheet contains plaintext system passwords for some staff: these were not imported; remove or rotate them and do not circulate that file.
+
+## Addendum: Cooperatives sheet
+The sheet and the bundled-list load are limited to the Director (own county) and National Admin, validated in full before saving (.xlsx only, 2 MB, 1000 rows), sent `no-store`, and audited by counts only. It carries no member or personal data (names of societies, locations, registration details only). Societies are never deleted by the sheet.
