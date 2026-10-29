@@ -288,3 +288,13 @@ the Governor's office, not an assumption.
 - [ ] Cooperatives sheet: download shows the Factory column; add a name and re-upload; the factory appears and is linked
 - [ ] Farmer Disbursements: Factory, Produce & quantity and Avg price columns show for a coffee/dairy society; a SACCO shows "—"
 - [ ] Expand a society: "How the total adds up" matches quantity × average price; unpriced deliveries are flagged
+
+## Crop Season Rates directory
+- [ ] Sidebar -> Crop Season Rates: coffee societies appear grouped by sub-county; "Go to sub-county" scrolls to the section
+- [ ] Director: Edit -> type payment (1) and (2) for a society, choose its factory -> Save; reload and the figures remain; empty cells show "Not yet"
+- [ ] Clear a price and save -> it returns to "Not yet"; "+ Payment" adds a third column
+- [ ] "New crop year" 2026/2027 starts an empty year; the old year is still selectable
+- [ ] Sub-County Officer sees the table without an Edit button
+- [ ] Farmer Disbursements: expanding a society shows its season rate and the factory
+- [ ] Import CSV: download the template, change a price, upload, Check file shows the change, Confirm and save; the table updates
+- [ ] A file with a misspelt society name saves nothing and names the row; 'Skip societies I can't match' saves the rest

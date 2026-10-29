@@ -425,3 +425,7 @@ GitHub also disables scheduled workflows in a repository after 60 days without a
 ## Schema note: factories and average price
 
 Adds two tables (`Factory`, `CooperativeFactory`). The change is additive only: no existing column or row is touched, and no shell is needed because the normal start command already runs `prisma db push`. Nothing needs seeding; add factories under **Factories** or via the Factory column of the cooperatives sheet. The nightly backup picks the new tables up automatically.
+
+## Schema note: crop season rates
+
+Adds two tables (`CropSeasonRecord`, `CropSeasonRound`). Additive only: the normal `prisma db push` on deploy creates them and no existing row is touched. Nothing to seed. The Director enters the figures under **Crop Season Rates**.

@@ -83,6 +83,15 @@ async function disbursementSummary(req, res) {
   const links = coopIds.length ? await prisma.cooperativeFactory.findMany({ where: { cooperativeId: { in: coopIds } }, include: { factory: { select: { id: true, name: true } } } }) : [];
   const factoriesBy = new Map();
   for (const l of links) { if (!factoriesBy.has(l.cooperativeId)) factoriesBy.set(l.cooperativeId, []); factoriesBy.get(l.cooperativeId).push({ id: l.factory.id, name: l.factory.name }); }
+  // Season rates directory: the latest crop year recorded for each society.
+  const seasonRecs = coopIds.length ? await prisma.cropSeasonRecord.findMany({ where: { cooperativeId: { in: coopIds } } }) : [];
+  const latestRec = new Map();
+  for (const r of seasonRecs) { const cur = latestRec.get(r.cooperativeId); if (!cur || r.cropYear > cur.cropYear) latestRec.set(r.cooperativeId, r); }
+  const recIds = [...latestRec.values()].map((r) => r.id);
+  const seasonRounds = recIds.length ? await prisma.cropSeasonRound.findMany({ where: { recordId: { in: recIds } } }) : [];
+  const seasonFacIds = [...new Set([...latestRec.values()].map((r) => r.factoryId).filter(Boolean))];
+  const seasonFacs = seasonFacIds.length ? await prisma.factory.findMany({ where: { id: { in: seasonFacIds } } }) : [];
+  const seasonFacName = new Map(seasonFacs.map((f) => [f.id, f.name]));
   const delBy = new Map();
   for (const d of deliveries) { if (!payoutById.has(d.payoutId)) continue; if (!delBy.has(d.cooperativeId)) delBy.set(d.cooperativeId, []); delBy.get(d.cooperativeId).push(d); }
 
@@ -90,7 +99,18 @@ async function disbursementSummary(req, res) {
     const ds = delBy.get(c.cooperativeId) || [];
     const linkedPayoutIds = new Set(ds.map((d) => d.payoutId));
     const paidForProduce = [...linkedPayoutIds].reduce((n, id) => n + Number(payoutById.get(id).amount), 0);
-    c.factories = (factoriesBy.get(c.cooperativeId) || []).sort((a, b) => a.name.localeCompare(b.name));
+    const fl = [...(factoriesBy.get(c.cooperativeId) || [])];
+    const sr = latestRec.get(c.cooperativeId);
+    if (sr && sr.factoryId && seasonFacName.has(sr.factoryId) && !fl.some((f) => f.id === sr.factoryId)) fl.push({ id: sr.factoryId, name: seasonFacName.get(sr.factoryId) });
+    c.factories = fl.sort((a, b) => a.name.localeCompare(b.name));
+    c.seasonRate = sr
+      ? {
+          cropYear: sr.cropYear,
+          unit: sr.unit,
+          factoryName: sr.factoryId ? seasonFacName.get(sr.factoryId) || null : null,
+          rounds: seasonRounds.filter((x) => x.recordId === sr.id).map((x) => ({ roundNo: x.roundNo, avgPrice: Number(x.avgPrice) })).sort((a, b) => a.roundNo - b.roundNo),
+        }
+      : null;
     c.produce = summariseProduce(ds);
     c.produceValue = Math.round(ds.reduce((n, d) => n + (valueOf(d) || 0), 0) * 100) / 100;
     c.unpricedDeliveries = ds.filter((d) => valueOf(d) === null).length;

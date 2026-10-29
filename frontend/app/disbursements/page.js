@@ -174,6 +174,14 @@ export default function DisbursementsPage() {
                     {expanded === c.cooperativeId && (
                       <tr className="border-t border-gray-100 bg-gray-50">
                         <td colSpan={isNationalAdmin ? 8 : 7} className="px-4 py-3">
+                          {c.seasonRate && (
+                            <div className="mb-3 rounded-md bg-white p-3 text-xs shadow-sm">
+                              <p className="mb-1 font-semibold text-gray-700">Season rate ({c.seasonRate.cropYear} crop year){c.seasonRate.factoryName ? ` · paid by ${c.seasonRate.factoryName}` : ""}</p>
+                              <p className="text-gray-600">
+                                {c.seasonRate.rounds.length === 0 ? "No payment recorded yet." : c.seasonRate.rounds.map((r) => `Payment (${r.roundNo}): KES ${num(r.avgPrice)} / ${unitLabel(c.seasonRate.unit).replace(/s$/, "")}`).join("  ·  ")}
+                              </p>
+                            </div>
+                          )}
                           {c.produce.length > 0 && (
                             <div className="mb-3 rounded-md bg-white p-3 text-xs shadow-sm">
                               <p className="mb-1 font-semibold text-gray-700">How the total adds up</p>

@@ -510,6 +510,15 @@ The **Farmer Disbursements** dashboard now answers "why is this society's total 
 
 API: `GET/POST /api/factories`, `PATCH/DELETE /api/factories/:id`, `POST /api/cooperatives/:id/factories`, `DELETE /api/cooperatives/:id/factories/:factoryId`; `GET /api/reports/disbursements` and `.../payouts/member-summary` gained `produce[]`, and the former also `factories[]`.
 
+## Crop Season Rates Directory (Module 14)
+
+A separate directory (sidebar -> **Crop Season Rates**) holding, for each society and **crop year** (e.g. 2025/2026): the **factory that paid**, the **ward**, and the **average price per kg (or litre) of each payment round**: Av. payment (1), (2), (3)... A round with no price shows **Not yet**.
+
+- **Layout:** pick a value chain (coffee, tea, dairy...) and crop year; societies are grouped under their sub-county ("Manyatta Sub-County - Coffee payouts for 2025/2026 crop year"). The **Go to sub-county** selector scrolls straight to that section. Each section ends with the simple average of the societies already paid.
+- **Who edits:** the Director (own county) and National Admin press **Edit**, change prices or the factory, add a payment round (**+ Payment**), and **Save**. Clear a price to put it back to "Not yet". The save is all-or-nothing and only touches what was changed. Sub-County and Field Officers can view only. **New crop year** starts an empty year.
+- **Feeds the other dashboards:** the factory chosen is also linked to the society (it shows on the society page and the Farmer Disbursements dashboard), and the dashboard's expanded row shows the society's latest season rates beside the quantity and average price actually delivered.
+- Prices are typed in by the County; nothing is estimated. A society with no entry shows "Not yet". API: `GET /api/season-rates?valueChain=&cropYear=&countyId=`, `PUT /api/season-rates/bulk`, `DELETE /api/season-rates/:cooperativeId?cropYear=`. **Import CSV (Director / National Admin):** *Import CSV* takes the county's own price list (CSV, semicolon CSV or Excel) or the downloadable template, pre-filled with the societies and current prices. Columns: society name, an optional Factory, and one column per payment headed like `Av. payment (1)`, `(2)`... Names are matched to registered societies ignoring numbering, FCS/F.C.S spelling and word order; an ambiguous name is flagged, never guessed. **Check file** shows what would change (nothing is written); **Confirm and save** applies it. 'Not yet', `-` and empty cells change nothing (an import never erases a price); a bad price or unknown society saves nothing and lists the rows (or tick *Skip societies I can't match*); a factory name that doesn't exist yet is created. Endpoints: `GET /api/season-rates/template`, `POST /api/season-rates/import`. Data model: `CropSeasonRecord` and `CropSeasonRound` (the backup includes both).
+
 ## Open Items From Scope (to confirm with County before Phase 2)
 
 See `docs/Embu_Coop_Engineering_Scope.pdf`, Section 6 — sub-county/ward list,

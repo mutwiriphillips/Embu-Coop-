@@ -235,6 +235,7 @@ model Cooperative {
   assets            Asset[]
   supervisoryBoard  SupervisoryBoardMember[]
   factories         CooperativeFactory[]
+  seasonRecords     CropSeasonRecord[]
 
   @@index([valueChain])
   @@index([countyId, subCounty, ward])
@@ -1150,6 +1151,7 @@ model Factory {
   updatedAt    DateTime @updatedAt
 
   cooperatives CooperativeFactory[]
+  seasonRecords CropSeasonRecord[]
 
   @@unique([countyId, name])
   @@index([countyId])
@@ -1165,4 +1167,36 @@ model CooperativeFactory {
 
   @@unique([cooperativeId, factoryId])
   @@index([factoryId])
+}
+
+// Season rates directory: for each society and crop year (e.g. "2025/2026"), the
+// factory that paid out and the average price per unit of each payment round
+// ((1) first payment, (2) second payment...). A round with no row means "not yet".
+model CropSeasonRecord {
+  id            String   @id @default(uuid())
+  cooperativeId String
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  cropYear      String // "2025/2026"
+  factoryId     String?
+  factory       Factory? @relation(fields: [factoryId], references: [id], onDelete: SetNull)
+  unit          String   @default("KG")
+  updatedById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  rounds        CropSeasonRound[]
+
+  @@unique([cooperativeId, cropYear])
+  @@index([cropYear])
+}
+
+model CropSeasonRound {
+  id        String   @id @default(uuid())
+  recordId  String
+  record    CropSeasonRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  roundNo   Int
+  avgPrice  Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+
+  @@unique([recordId, roundNo])
 }
