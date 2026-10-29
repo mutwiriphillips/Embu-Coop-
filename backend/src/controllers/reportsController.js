@@ -1,5 +1,6 @@
 const prisma = require("../config/db");
 const { areaScope } = require("../utils/geography");
+const { summariseProduce, valueOf } = require("../utils/produceSummary");
 
 // GET /api/reports/disbursements?from=&to=&countyId=
 // County-scoped rollup of money disbursed OUT to farmers, grouped by
@@ -39,6 +40,7 @@ async function disbursementSummary(req, res) {
       },
     },
     select: {
+      id: true,
       amount: true,
       cooperativeId: true,
       cooperative: { select: { id: true, name: true, county: { select: { id: true, name: true } } } },
@@ -64,6 +66,37 @@ async function disbursementSummary(req, res) {
 
   const byCooperativeArr = [...byCooperative.values()].sort((a, b) => b.total - a.total);
   const totalDisbursed = byCooperativeArr.reduce((sum, c) => sum + c.total, 0);
+
+  // Why is the total what it is? The produce these payouts settled (quantity x
+  // average price), and the factories that pay each society. Deliveries are
+  // linked to a payout when it is recorded, so only linked deliveries explain a
+  // payout; money paid with no produce attached (dividends, bonuses, older
+  // entries) is reported separately rather than guessed at.
+  const payoutById = new Map(payouts.map((p) => [p.id, p]));
+  const coopIds = byCooperativeArr.map((c) => c.cooperativeId);
+  const deliveries = coopIds.length
+    ? await prisma.produceDelivery.findMany({
+        where: { cooperativeId: { in: coopIds }, payoutId: { not: null } },
+        select: { cooperativeId: true, payoutId: true, produceType: true, unit: true, quantity: true, ratePerUnit: true, totalValue: true },
+      })
+    : [];
+  const links = coopIds.length ? await prisma.cooperativeFactory.findMany({ where: { cooperativeId: { in: coopIds } }, include: { factory: { select: { id: true, name: true } } } }) : [];
+  const factoriesBy = new Map();
+  for (const l of links) { if (!factoriesBy.has(l.cooperativeId)) factoriesBy.set(l.cooperativeId, []); factoriesBy.get(l.cooperativeId).push({ id: l.factory.id, name: l.factory.name }); }
+  const delBy = new Map();
+  for (const d of deliveries) { if (!payoutById.has(d.payoutId)) continue; if (!delBy.has(d.cooperativeId)) delBy.set(d.cooperativeId, []); delBy.get(d.cooperativeId).push(d); }
+
+  for (const c of byCooperativeArr) {
+    const ds = delBy.get(c.cooperativeId) || [];
+    const linkedPayoutIds = new Set(ds.map((d) => d.payoutId));
+    const paidForProduce = [...linkedPayoutIds].reduce((n, id) => n + Number(payoutById.get(id).amount), 0);
+    c.factories = (factoriesBy.get(c.cooperativeId) || []).sort((a, b) => a.name.localeCompare(b.name));
+    c.produce = summariseProduce(ds);
+    c.produceValue = Math.round(ds.reduce((n, d) => n + (valueOf(d) || 0), 0) * 100) / 100;
+    c.unpricedDeliveries = ds.filter((d) => valueOf(d) === null).length;
+    c.paidForProduce = paidForProduce;
+    c.paidWithoutProduce = Math.round((c.total - paidForProduce) * 100) / 100;
+  }
 
   res.json({
     totalDisbursed,

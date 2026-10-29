@@ -26,6 +26,7 @@ model County {
   agrovetShops AgrovetShop[]
   subCounties  SubCounty[]
   staffMembers StaffMember[]
+  factories    Factory[]
 }
 
 // ---------------------------------------------------------------------------
@@ -233,6 +234,7 @@ model Cooperative {
   payouts           Payout[]
   assets            Asset[]
   supervisoryBoard  SupervisoryBoardMember[]
+  factories         CooperativeFactory[]
 
   @@index([valueChain])
   @@index([countyId, subCounty, ward])
@@ -1129,4 +1131,38 @@ model StaffTransfer {
 
   @@index([staffId])
   @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Factories (mills, processors, buyers) that pay a cooperative for its produce
+// ---------------------------------------------------------------------------
+// A coffee factory, tea factory, dairy processor, etc. A society can be paid by
+// several, and a factory can pay several societies. Kept per county.
+model Factory {
+  id           String   @id @default(uuid())
+  name         String
+  countyId     String
+  county       County   @relation(fields: [countyId], references: [id])
+  valueChain   ValueChain? // broad group the factory buys (coffee, tea, dairy...); optional
+  location     String?
+  contactPhone String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  cooperatives CooperativeFactory[]
+
+  @@unique([countyId, name])
+  @@index([countyId])
+}
+
+model CooperativeFactory {
+  id            String      @id @default(uuid())
+  cooperativeId String
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  factoryId     String
+  factory       Factory     @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([cooperativeId, factoryId])
+  @@index([factoryId])
 }

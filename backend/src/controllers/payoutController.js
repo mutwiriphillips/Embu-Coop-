@@ -1,6 +1,7 @@
 const { z } = require("zod");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
+const { summariseProduce } = require("../utils/produceSummary");
 
 const payoutSchema = z.object({
   memberId: z.string().uuid(),
@@ -91,6 +92,15 @@ async function memberSummary(req, res) {
     include: { member: { select: { id: true, legalName: true } } },
   });
 
+  // The produce each farmer's payouts settled: quantity and average price.
+  const payoutIds = new Set(payouts.map((p) => p.id));
+  const delivered = await prisma.produceDelivery.findMany({
+    where: { cooperativeId: req.params.id, payoutId: { not: null } },
+    select: { memberId: true, payoutId: true, produceType: true, unit: true, quantity: true, ratePerUnit: true, totalValue: true },
+  });
+  const delByMember = new Map();
+  for (const d of delivered) { if (!payoutIds.has(d.payoutId)) continue; if (!delByMember.has(d.memberId)) delByMember.set(d.memberId, []); delByMember.get(d.memberId).push(d); }
+
   const byMember = new Map();
   for (const p of payouts) {
     const key = p.memberId;
@@ -102,6 +112,7 @@ async function memberSummary(req, res) {
     entry.payoutCount += 1;
   }
 
+  for (const e of byMember.values()) e.produce = summariseProduce(delByMember.get(e.memberId) || []);
   res.json([...byMember.values()].sort((a, b) => b.total - a.total));
 }
 

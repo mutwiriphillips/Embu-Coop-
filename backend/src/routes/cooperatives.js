@@ -3,6 +3,7 @@ const { authenticate, requireRole, requirePermission, requireCooperativeAccess }
 const ctrl = require("../controllers/cooperativeController");
 const importCtrl = require("../controllers/importController");
 const sheetCtrl = require("../controllers/cooperativeSheetController");
+const factoryCtrl = require("../controllers/factoryController");
 const { upload } = require("../utils/fileStorage");
 
 const router = express.Router();
@@ -30,6 +31,10 @@ router.patch("/:id", requireCooperativeAccess(), requirePermission("cooperatives
 // (own county) or the National Admin can do it. Previously any manager could
 // delete their own cooperative.
 router.delete("/:id", requireRole("NATIONAL_ADMIN", "DIRECTOR"), requireCooperativeAccess(), ctrl.deleteCooperative);
+
+// Factories that pay this society (staff only; a manager can see them but not change them).
+router.post("/:id/factories", requireRole("NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"), requireCooperativeAccess(), factoryCtrl.linkToCooperative);
+router.delete("/:id/factories/:factoryId", requireRole("NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"), requireCooperativeAccess(), factoryCtrl.unlinkFromCooperative);
 
 // Member roll (nested under a cooperative) — carries National ID and phone
 // numbers, so this is exactly the kind of data requireCooperativeAccess

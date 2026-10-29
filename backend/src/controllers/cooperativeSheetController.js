@@ -1,4 +1,5 @@
 const multer = require("multer");
+const crypto = require("crypto");
 const prisma = require("../config/db");
 const { recordAudit } = require("../utils/audit");
 const { httpError, norm, ensureCountyGeography, matchTextLocation } = require("../utils/geography");
@@ -19,6 +20,7 @@ const COLUMNS = [
   { key: "societyType", header: "Type of Society", aliases: ["Type"], width: 18, edit: true, optional: true },
   { key: "registrationNumber", header: "Registration Number", width: 20, edit: true, optional: true },
   { key: "registrationDate", header: "Registration Date", width: 16, edit: true, optional: true },
+  { key: "factories", header: "Factory (separate several with ;)", aliases: ["Factory", "Factories"], width: 36, edit: true, optional: true },
   { key: "compliance", header: "Compliance (read-only)", width: 22, edit: false },
   { key: "missing", header: "Still missing (read-only)", width: 70, edit: false },
 ];
@@ -33,8 +35,9 @@ const READ_ME = [
   "4. New societies need Name of Society, Type of Society, Sub-County and Ward. Registration Number and Registration Date can be added later, here or on the society's own page.",
   "5. Registration Number must be unique and is never invented: leave it blank until you have the number from the Registrar. Registration Date: 31/12/2015, 2015-12-31 or an Excel date.",
   "6. The original county list (S/NO, County, Subcounty, WARD, NAME OF SOCIETY, TYPE OF SOCIETY) can be uploaded as it is.",
-  "7. Grey columns are for reading only and are ignored on upload. Compliance shows how complete each society's record is; the rest (documents, members, committee, board, AGM) is added on the society's own page.",
-  "8. If any row has a problem, NOTHING is saved and you get a list of the rows to fix.",
+  "7. Factory: the factory (mill, processor or buyer) that pays this society. Several: separate with ; . A factory that is not in the county yet is added by name. The sheet only ever ADDS factories to a society; remove one on the society's page.",
+  "8. Grey columns are for reading only and are ignored on upload. Compliance shows how complete each society's record is; the rest (documents, members, committee, board, AGM) is added on the society's own page.",
+  "9. If any row has a problem, NOTHING is saved and you get a list of the rows to fix.",
   "",
   "CONFIDENTIAL: for the Director and National Admin. Delete downloaded copies when you are done.",
 ];
@@ -58,11 +61,14 @@ async function download(req, res) {
   const where = req.user.role === "DIRECTOR" ? { countyId: req.user.countyId } : {};
   const coops = await prisma.cooperative.findMany({ where, include: { county: { select: { name: true } } }, orderBy: [{ subCounty: "asc" }, { ward: "asc" }, { name: "asc" }] });
   const comp = await complianceFor(prisma, coops);
+  const fl = coops.length ? await prisma.cooperativeFactory.findMany({ where: where.countyId ? { cooperative: { countyId: where.countyId } } : {}, include: { factory: { select: { name: true } } } }) : [];
+  const facBy = new Map();
+  for (const l of fl) { if (!facBy.has(l.cooperativeId)) facBy.set(l.cooperativeId, []); facBy.get(l.cooperativeId).push(l.factory.name); }
   const rows = coops.map((c, i) => {
     const k = comp.get(c.id);
     return {
       serialNo: i + 1, id: c.id, county: c.county?.name || "", subCounty: c.subCounty, ward: c.ward, name: c.name, societyType: c.societyType || "",
-      registrationNumber: c.registrationNumber || "", registrationDate: c.registrationDate || null,
+      registrationNumber: c.registrationNumber || "", registrationDate: c.registrationDate || null, factories: (facBy.get(c.id) || []).sort().join('; '),
       compliance: `${LEVEL_LABEL[k.level]} (${k.percent}%)`, missing: k.missing.map((m) => m.label).join("; "),
     };
   });
@@ -162,7 +168,9 @@ async function applyRows(user, rows, { fillOnly = false, action }) {
       if (dt === undefined) { bad(r, "Registration Date is not a valid past date (use 31/12/2015 or 2015-12-31)"); continue; }
       if (!existing || !fillOnly || !existing.registrationDate) d.registrationDate = dt;
     }
-    plan.push({ r, existing, county, d, name: r.name });
+    const facNames = [...new Set(String(r.factories || "").split(/[;\n]/).map(clean).filter(Boolean))];
+    if (facNames.some((n) => n.length < 2 || n.length > 120)) { bad(r, "A factory name must be 2 to 120 characters"); continue; }
+    plan.push({ r, existing, county, d, name: r.name, facNames });
   }
   if (errors.length) return { status: 422, body: { error: `Nothing was saved. ${errors.length} problem${errors.length === 1 ? "" : "s"} to fix in the sheet.`, errors: errors.slice(0, 50), moreErrors: Math.max(0, errors.length - 50) } };
 
@@ -170,7 +178,8 @@ async function applyRows(user, rows, { fillOnly = false, action }) {
   const toCreate = [];
   for (const p of plan) {
     if (!p.existing) {
-      toCreate.push({ name: p.name, countyId: p.county.id, valueChain: "OTHER", ...p.d });
+      p.newId = crypto.randomUUID();
+      toCreate.push({ id: p.newId, name: p.name, countyId: p.county.id, valueChain: "OTHER", ...p.d });
       if (!p.d.wardId) result.locationNotMatched.push(p.name);
       continue;
     }
@@ -185,8 +194,37 @@ async function applyRows(user, rows, { fillOnly = false, action }) {
   }
   for (let i = 0; i < toCreate.length; i += 100) await prisma.cooperative.createMany({ data: toCreate.slice(i, i + 100) });
   result.created = toCreate.length;
+
+  // Factories: only ever ADD (create the factory by name if the county doesn't have it, then link).
+  result.factoriesCreated = 0; result.factoryLinksAdded = 0;
+  const wantFac = plan.filter((p) => p.facNames.length);
+  if (wantFac.length) {
+    const countyIds = [...new Set(wantFac.map((p) => p.county.id))];
+    const have = await prisma.factory.findMany({ where: { countyId: { in: countyIds } } });
+    const facKey = new Map(have.map((f) => [`${f.countyId}|${norm(f.name)}`, f.id]));
+    const newFac = [];
+    for (const p of wantFac) for (const n of p.facNames) {
+      const k = `${p.county.id}|${norm(n)}`;
+      if (!facKey.has(k)) {
+        const id = crypto.randomUUID(); facKey.set(k, id);
+        const vc = valueChainFor((p.d.societyType || (p.existing && p.existing.societyType) || ""));
+        newFac.push({ id, name: n, countyId: p.county.id, valueChain: vc === "OTHER" ? null : vc });
+      }
+    }
+    if (newFac.length) await prisma.factory.createMany({ data: newFac });
+    const existingIds = wantFac.filter((p) => p.existing).map((p) => p.existing.id);
+    const haveLinks = existingIds.length ? await prisma.cooperativeFactory.findMany({ where: { cooperativeId: { in: existingIds } } }) : [];
+    const linked = new Set(haveLinks.map((l) => `${l.cooperativeId}|${l.factoryId}`));
+    const newLinks = [];
+    for (const p of wantFac) for (const n of p.facNames) {
+      const cid = p.existing ? p.existing.id : p.newId, fid = facKey.get(`${p.county.id}|${norm(n)}`);
+      if (!linked.has(`${cid}|${fid}`)) { linked.add(`${cid}|${fid}`); newLinks.push({ cooperativeId: cid, factoryId: fid }); }
+    }
+    if (newLinks.length) await prisma.cooperativeFactory.createMany({ data: newLinks });
+    result.factoriesCreated = newFac.length; result.factoryLinksAdded = newLinks.length;
+  }
   result.locationNotMatched = [...new Set(result.locationNotMatched)].slice(0, 50);
-  await recordAudit({ userId: user.id, action, entityType: "Cooperative", entityId: ownCounty.id, metadata: { created: result.created, updated: result.updated, unchanged: result.unchanged } });
+  await recordAudit({ userId: user.id, action, entityType: "Cooperative", entityId: ownCounty.id, metadata: { created: result.created, updated: result.updated, unchanged: result.unchanged, factoriesCreated: result.factoriesCreated, factoryLinksAdded: result.factoryLinksAdded } });
   return { status: 200, body: result };
 }
 

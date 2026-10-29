@@ -116,12 +116,13 @@ async function getCooperative(req, res) {
       documents: { orderBy: { createdAt: "desc" } },
       committees: { include: { members: true, signatories: true }, orderBy: { createdAt: "desc" } },
       agms: true,
+      factories: { include: { factory: true } },
     },
   });
   // Committee status is recomputed from today's date (the stored value goes
   // stale as terms run out), and the committee in force is marked current.
   const [compliance] = [(await complianceFor(prisma, [coop])).get(coop.id)];
-  res.json({ ...coop, committees: withLiveStatus(coop.committees), compliance });
+  res.json({ ...coop, committees: withLiveStatus(coop.committees), compliance, factories: (coop.factories || []).map((l) => ({ id: l.factory.id, name: l.factory.name, valueChain: l.factory.valueChain, location: l.factory.location })) });
 }
 
 async function createCooperative(req, res) {

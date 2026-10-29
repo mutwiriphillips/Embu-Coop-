@@ -23,28 +23,70 @@ permissions:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Install PostgreSQL 16 client
+      # Use the NEWEST PostgreSQL client. pg_dump refuses to dump a server newer
+      # than itself ("server version mismatch"), which is the commonest reason a
+      # backup that once worked starts failing after Render upgrades the database.
+      # A newer client can always dump an older server.
+      - name: Install the latest PostgreSQL client
         run: |
+          set -euo pipefail
           sudo install -d /usr/share/postgresql-common/pgdg
           sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client-16
+          for V in 19 18 17; do
+            if sudo apt-get install -y -qq "postgresql-client-$V" 2>/dev/null; then echo "PGBIN=/usr/lib/postgresql/$V/bin" >> "$GITHUB_ENV"; echo "Installed PostgreSQL client $V"; break; fi
+          done
+          grep -q PGBIN "$GITHUB_ENV" || { echo "::error::Could not install a PostgreSQL client"; exit 1; }
+
+      - name: Check the database can be reached
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          PGSSLMODE: require          # Render's external connections need SSL
+          PGCONNECT_TIMEOUT: "30"
+        run: |
+          set -uo pipefail
+          test -n "$BACKUP_DATABASE_URL" || { echo "::error::The BACKUP_DATABASE_URL secret is not set (repo Settings -> Secrets and variables -> Actions)"; exit 1; }
+          test -n "$BACKUP_PASSPHRASE"   || { echo "::error::The BACKUP_PASSPHRASE secret is not set"; exit 1; }
+          case "$BACKUP_DATABASE_URL" in postgres://*|postgresql://*) ;; *) echo "::error::BACKUP_DATABASE_URL does not look like a postgres:// connection string"; exit 1;; esac
+          HOST=$(printf '%s' "$BACKUP_DATABASE_URL" | sed -E 's#^[a-z]+://[^@]*@([^/:?]+).*#\1#')
+          case "$HOST" in *.*) ;; *) echo "::error::BACKUP_DATABASE_URL uses Render's INTERNAL address (no .render.com in the host). GitHub can't reach that: copy the EXTERNAL connection string from Render -> database -> Connect."; exit 1;; esac
+          for i in 1 2 3; do
+            if OUT=$("$PGBIN/psql" "$BACKUP_DATABASE_URL" -tAc "select current_setting('server_version')" 2>&1); then
+              echo "Database reachable. Server version: $OUT"; exit 0
+            fi
+            echo "Attempt $i failed; waiting before retrying (the database may be waking up)"; sleep 30
+          done
+          # Say what the failure means, without printing the connection string.
+          M=$(printf '%s' "$OUT" | sed -E 's#postgres(ql)?://[^ ]+#<connection string>#g')
+          echo "psql said: $M"
+          case "$M" in
+            *"could not translate host name"*|*"Name or service not known"*) echo "::error::The database host does not exist any more. A Render FREE database expires after 30 days: open Render -> your database and check it still exists/is not suspended, then update BACKUP_DATABASE_URL.";;
+            *"password authentication failed"*) echo "::error::The database password is wrong. It was probably rotated: copy the new EXTERNAL connection string from Render into BACKUP_DATABASE_URL.";;
+            *"no pg_hba.conf"*|*"SSL"*|*"ssl"*) echo "::error::The database refused this connection (SSL or access control). In Render -> database -> Access control, allow external connections (0.0.0.0/0 for GitHub runners), and use the EXTERNAL URL.";;
+            *"timeout"*|*"timed out"*|*"Connection refused"*) echo "::error::The database did not answer. Check Render -> database is Available (not suspended) and that Access control allows external connections.";;
+            *) echo "::error::Could not connect to the database. See the psql message above.";;
+          esac
+          exit 1
 
       - name: Dump and encrypt
         env:
           BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
           BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          PGSSLMODE: require
+          PGCONNECT_TIMEOUT: "30"
         run: |
           set -euo pipefail
-          test -n "$BACKUP_DATABASE_URL" || { echo "BACKUP_DATABASE_URL secret is not set"; exit 1; }
-          test -n "$BACKUP_PASSPHRASE"   || { echo "BACKUP_PASSPHRASE secret is not set"; exit 1; }
           umask 077
           F="embu-coop-$(date -u +%Y-%m-%d-%H%M).dump"
-          /usr/lib/postgresql/16/bin/pg_dump --format=custom --no-owner --no-acl "$BACKUP_DATABASE_URL" -f "$F"
+          "$PGBIN/pg_dump" --format=custom --no-owner --no-acl "$BACKUP_DATABASE_URL" -f "$F"
           # a dump with no tables means something is wrong; do not keep it
-          test "$(/usr/lib/postgresql/16/bin/pg_restore --list "$F" | grep -c 'TABLE DATA')" -ge 10
+          N=$("$PGBIN/pg_restore" --list "$F" | grep -c 'TABLE DATA' || true)
+          echo "Tables dumped: $N"
+          test "$N" -ge 10 || { echo "::error::The dump has only $N tables (expected 10 or more); not keeping it"; exit 1; }
           openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_PASSPHRASE -in "$F" -out "$F.enc"
           rm "$F"
           ls -l "$F.enc"

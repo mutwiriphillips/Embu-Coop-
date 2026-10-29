@@ -412,3 +412,16 @@ Not covered: anything entered after the last backup. That is why the nightly cop
 ## Cooperatives list (after deploying this version)
 1. The change is additive (societies may now have no registration number; `societyType` already exists). The normal `prisma db push` is enough.
 2. Sign in as Director or National Admin -> **Cooperatives** -> **Load Embu county list** once (or **Upload cooperatives sheet** with the County's spreadsheet). Loading again is safe.
+
+## If the nightly backup fails
+Open the failed run in GitHub -> Actions -> "Nightly database backup" and look at the red step. The workflow now says in plain words which of these it is:
+- **Database host does not exist / did not answer:** a Render FREE database expires after 30 days. Check the database still exists and is Available in Render; copy its **External** connection string into the `BACKUP_DATABASE_URL` secret.
+- **Password authentication failed:** the password changed; update the secret.
+- **SSL / access control refused:** Render -> database -> Access control must allow external connections.
+- **Internal address:** the secret must be the External URL (host ends in `.render.com`).
+- **Server version mismatch** (older workflow): fixed, the workflow now installs the newest PostgreSQL client.
+GitHub also disables scheduled workflows in a repository after 60 days without activity if it is public; keep the repo private and re-enable the workflow from the Actions tab if it shows as disabled.
+
+## Schema note: factories and average price
+
+Adds two tables (`Factory`, `CooperativeFactory`). The change is additive only: no existing column or row is touched, and no shell is needed because the normal start command already runs `prisma db push`. Nothing needs seeding; add factories under **Factories** or via the Factory column of the cooperatives sheet. The nightly backup picks the new tables up automatically.

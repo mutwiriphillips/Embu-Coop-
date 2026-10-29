@@ -497,6 +497,19 @@ Societies are registered in bulk with only what the County has (name, type, sub-
 - **Compliance indicator (10 items):** registration number; date of registration; sub-county and ward matched; certificate of registration uploaded; by-laws uploaded; member list; management committee; supervisory board; AGM in the last 12 months; audit report. A rejected document does not count. **Compliant** = all 10; **Partial** = 5 to 9; **Incomplete** = fewer than 5. It shows as a badge in the registry (with filter tiles), as a checklist on each society's page with links to where each missing item is added, and as columns in the sheet. Logic: `backend/src/utils/cooperativeCompliance.js`.
 - Cooperative-manager sign-in by registration number needs the number to be recorded first.
 
+## Average Price, Quantity & Paying Factories on the Payout Dashboard (Module 13)
+
+The **Farmer Disbursements** dashboard now answers "why is this society's total what it is?" for every value chain:
+
+- **Produce & quantity** and **Avg price** columns per society (e.g. coffee: 450 kg, KES 57.50/kg). The average is *weighted* (total value ÷ priced quantity), grouped by produce and unit, so kg, litres and bags are never added together.
+- **Factory** column: the factories that pay the society.
+- Expanding a society shows "how the total adds up": quantity × average price = produce value, what was paid against it, and what was paid with no produce attached (dividends, bonuses, older entries). Each farmer card shows their own quantity and average price.
+- Honesty rules: only deliveries linked to a payout when it was recorded explain that payout. Deliveries with no price are counted and flagged, never guessed. Societies with no produce (SACCO, housing, transport) show "—".
+
+**Factories** (sidebar → Factories; National Admin and Director add/edit/delete, Sub-County Officers can view and link). A factory belongs to a county and is linked to the societies it pays, on the society page ("Factories paying this society") or through the **Factory** column of the cooperatives Excel sheet (separate several with `;`; unknown names are created, and the sheet only ever adds links). A factory that still pays a society cannot be deleted. Factory names are never invented; you supply them.
+
+API: `GET/POST /api/factories`, `PATCH/DELETE /api/factories/:id`, `POST /api/cooperatives/:id/factories`, `DELETE /api/cooperatives/:id/factories/:factoryId`; `GET /api/reports/disbursements` and `.../payouts/member-summary` gained `produce[]`, and the former also `factories[]`.
+
 ## Open Items From Scope (to confirm with County before Phase 2)
 
 See `docs/Embu_Coop_Engineering_Scope.pdf`, Section 6 — sub-county/ward list,

@@ -14,6 +14,41 @@ function defaultTo() {
   return new Date().toISOString().slice(0, 10);
 }
 
+const kes = (n) => "KES " + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const num = (n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const unitLabel = (u) => ({ KG: "kg", LITERS: "litres", BAGS: "bags", CRATES: "crates", OTHER: "units" }[u] || (u || "").toLowerCase());
+
+// Why is the total what it is? Quantity delivered x average price per unit.
+function ProduceLines({ lines }) {
+  if (!lines || lines.length === 0) return <span className="text-gray-400">—</span>;
+  return (
+    <div className="space-y-1">
+      {lines.map((l) => (
+        <div key={l.produceType + l.unit} className="leading-tight">
+          <span className="font-medium text-gray-800">{l.produceType}</span>{" "}
+          <span className="text-gray-500">{num(l.quantity)} {unitLabel(l.unit)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+function PriceLines({ lines }) {
+  if (!lines || lines.length === 0) return <span className="text-gray-400">—</span>;
+  return (
+    <div className="space-y-1">
+      {lines.map((l) => (
+        <div key={l.produceType + l.unit} className="leading-tight">
+          {l.avgPrice == null ? <span className="text-gray-400">no price recorded</span> : <>KES {num(l.avgPrice)}<span className="text-gray-400"> / {unitLabel(l.unit).replace(/s$/, "")}</span></>}
+        </div>
+      ))}
+    </div>
+  );
+}
+function Factories({ list }) {
+  if (!list || list.length === 0) return <span className="text-gray-400">—</span>;
+  return <div className="space-y-0.5">{list.map((f) => <div key={f.id} className="leading-tight">{f.name}</div>)}</div>;
+}
+
 export default function DisbursementsPage() {
   const { user } = useAuth();
   const isNationalAdmin = user?.role === "NATIONAL_ADMIN";
@@ -112,6 +147,9 @@ export default function DisbursementsPage() {
                 <tr>
                   <th className="px-4 py-2">Cooperative</th>
                   {isNationalAdmin && <th className="px-4 py-2">County</th>}
+                  <th className="px-4 py-2">Factory</th>
+                  <th className="px-4 py-2">Produce &amp; quantity</th>
+                  <th className="px-4 py-2">Avg price</th>
                   <th className="px-4 py-2">Total Disbursed</th>
                   <th className="px-4 py-2">Payouts</th>
                   <th className="px-4 py-2"></th>
@@ -126,13 +164,32 @@ export default function DisbursementsPage() {
                     >
                       <td className="px-4 py-2 font-medium text-kenya-green">{c.cooperativeName}</td>
                       {isNationalAdmin && <td className="px-4 py-2">{c.countyName}</td>}
+                      <td className="px-4 py-2 text-xs"><Factories list={c.factories} /></td>
+                      <td className="px-4 py-2 text-xs"><ProduceLines lines={c.produce} /></td>
+                      <td className="px-4 py-2 text-xs"><PriceLines lines={c.produce} /></td>
                       <td className="px-4 py-2">KES {c.total.toLocaleString()}</td>
                       <td className="px-4 py-2">{c.payoutCount}</td>
                       <td className="px-4 py-2 text-xs text-gray-400">{expanded === c.cooperativeId ? "▲ hide" : "▼ farmers"}</td>
                     </tr>
                     {expanded === c.cooperativeId && (
                       <tr className="border-t border-gray-100 bg-gray-50">
-                        <td colSpan={isNationalAdmin ? 5 : 4} className="px-4 py-3">
+                        <td colSpan={isNationalAdmin ? 8 : 7} className="px-4 py-3">
+                          {c.produce.length > 0 && (
+                            <div className="mb-3 rounded-md bg-white p-3 text-xs shadow-sm">
+                              <p className="mb-1 font-semibold text-gray-700">How the total adds up</p>
+                              {c.produce.map((l) => (
+                                <p key={l.produceType + l.unit} className="text-gray-600">
+                                  {l.produceType}: {num(l.quantity)} {unitLabel(l.unit)}
+                                  {l.avgPrice != null && <> × average KES {num(l.avgPrice)} = <b>{kes(l.value)}</b></>}
+                                  {l.unpricedDeliveries > 0 && <span className="text-kenya-red"> ({l.unpricedDeliveries} delivery(ies) have no price, so the average covers {num(l.pricedQuantity)} {unitLabel(l.unit)} only)</span>}
+                                </p>
+                              ))}
+                              <p className="mt-1 text-gray-700">Value of produce settled: <b>{kes(c.produceValue)}</b> · Paid against it: <b>{kes(c.paidForProduce)}</b>{c.paidWithoutProduce > 0 && <> · Paid with no produce attached (dividends, bonuses, older entries): <b>{kes(c.paidWithoutProduce)}</b></>}</p>
+                            </div>
+                          )}
+                          {c.produce.length === 0 && c.paidWithoutProduce > 0 && (
+                            <p className="mb-3 text-xs text-gray-500">No produce is attached to these payouts ({kes(c.paidWithoutProduce)}), for example dividends, savings or older entries.</p>
+                          )}
                           {!memberBreakdown[c.cooperativeId] ? (
                             <p className="text-xs text-gray-400">Loading farmer breakdown…</p>
                           ) : memberBreakdown[c.cooperativeId].length === 0 ? (
@@ -144,6 +201,9 @@ export default function DisbursementsPage() {
                                   <p className="font-medium text-gray-800">{m.memberName}</p>
                                   <p className="text-kenya-green">KES {m.total.toLocaleString()}</p>
                                   <p className="text-gray-400">{m.payoutCount} payout(s)</p>
+                                  {(m.produce || []).map((l) => (
+                                    <p key={l.produceType + l.unit} className="text-gray-500">{l.produceType}: {num(l.quantity)} {unitLabel(l.unit)}{l.avgPrice != null ? ` @ KES ${num(l.avgPrice)}` : ""}</p>
+                                  ))}
                                 </div>
                               ))}
                             </div>
@@ -155,7 +215,7 @@ export default function DisbursementsPage() {
                 ))}
                 {summary.byCooperative.length === 0 && (
                   <tr>
-                    <td colSpan={isNationalAdmin ? 5 : 4} className="px-4 py-6 text-center text-gray-400">
+                    <td colSpan={isNationalAdmin ? 8 : 7} className="px-4 py-6 text-center text-gray-400">
                       No disbursements recorded in this period.
                     </td>
                   </tr>

@@ -128,6 +128,58 @@ function CompliancePanel({ coop, onGo }) {
   );
 }
 
+function FactoriesPanel({ coop, onChange }) {
+  const { user } = useAuth();
+  const canEdit = ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"].includes(user?.role);
+  const [options, setOptions] = useState([]);
+  const [pick, setPick] = useState("");
+  const [error, setError] = useState("");
+  const linked = coop.factories || [];
+
+  useEffect(() => {
+    if (canEdit) api.get("/factories").then((r) => setOptions(r.data)).catch(() => {});
+  }, [canEdit]);
+
+  async function add() {
+    if (!pick) return;
+    setError("");
+    try { await api.post(`/cooperatives/${coop.id}/factories`, { factoryId: pick }); setPick(""); onChange(); }
+    catch (err) { setError(err?.response?.data?.error || "Could not add factory"); }
+  }
+  async function remove(fid) {
+    setError("");
+    try { await api.delete(`/cooperatives/${coop.id}/factories/${fid}`); onChange(); }
+    catch (err) { setError(err?.response?.data?.error || "Could not remove factory"); }
+  }
+  const available = options.filter((o) => o.countyId === coop.countyId && !linked.some((l) => l.id === o.id));
+
+  return (
+    <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3 text-sm">
+      <p className="mb-1 text-xs font-semibold uppercase text-gray-500">Factories paying this society</p>
+      {linked.length === 0 ? <p className="text-xs text-gray-400">None recorded yet.</p> : (
+        <div className="flex flex-wrap gap-2">
+          {linked.map((f) => (
+            <span key={f.id} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs">
+              {f.name}
+              {canEdit && <button className="text-gray-400 hover:text-kenya-red" title="Remove" onClick={() => remove(f.id)}>×</button>}
+            </span>
+          ))}
+        </div>
+      )}
+      {canEdit && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <select className="rounded-md border border-gray-300 px-2 py-1 text-xs" value={pick} onChange={(e) => setPick(e.target.value)}>
+            <option value="">{available.length ? "Add a factory…" : "No more factories (add them under Factories)"}</option>
+            {available.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+          <button className="rounded-md bg-kenya-green px-3 py-1 text-xs font-medium text-white disabled:opacity-40" disabled={!pick} onClick={add}>Add</button>
+        </div>
+      )}
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 export default function CooperativeDetailPage() {
   const { id } = useParams();
   const [coop, setCoop] = useState(null);
@@ -168,6 +220,7 @@ export default function CooperativeDetailPage() {
       </p>
       <RegistrationDate coop={coop} onSaved={reload} />
       <CompliancePanel coop={coop} onGo={setTab} />
+      <FactoriesPanel coop={coop} onChange={reload} />
 
       <div className="mb-6 flex gap-2 overflow-x-auto whitespace-nowrap border-b border-gray-200">
         {(ASSET_TRACKED_VALUE_CHAINS.includes(coop.valueChain)

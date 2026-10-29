@@ -281,3 +281,10 @@ the Governor's office, not an assumption.
 - [ ] Download cooperatives sheet, add a registration number and date, upload -> "1 updated"; the society's page shows it.
 - [ ] A sheet with a duplicate registration number or a bad date saves nothing and lists the rows.
 - [ ] On a society's page: the checklist shows what is missing, and adding a document/member/committee/AGM raises the score.
+
+## Factories & payout average price
+- [ ] Factories page: add a factory (Director), duplicate name refused, phone shown as +254…
+- [ ] Society page → "Factories paying this society": add and remove one
+- [ ] Cooperatives sheet: download shows the Factory column; add a name and re-upload; the factory appears and is linked
+- [ ] Farmer Disbursements: Factory, Produce & quantity and Avg price columns show for a coffee/dairy society; a SACCO shows "—"
+- [ ] Expand a society: "How the total adds up" matches quantity × average price; unpriced deliveries are flagged
