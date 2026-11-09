@@ -25,7 +25,8 @@ async function listContributions(req, res) {
     },
     orderBy: { contributionDate: "desc" },
   });
-  res.json(contributions);
+  // The pasted transaction message is for the National Admin only.
+  res.json(req.user.role === "NATIONAL_ADMIN" ? contributions : contributions.map(({ transactionMessage, ...c }) => c));
 }
 
 // Records a contribution against a member's ledger. In production this is

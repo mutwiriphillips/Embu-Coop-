@@ -254,7 +254,72 @@ export default function CooperativeDetailPage() {
   );
 }
 
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const prettyMonth = (ym) => (ym ? `${MONTH_NAMES[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}` : "");
+
+// Payments keyed in by hand. Only the National Admin sees the entry form and the message.
+function PaymentRow({ coop, m, isAdmin, onChange, colSpan }) {
+  const [history, setHistory] = useState(null);
+  const [form, setForm] = useState({ amount: "", forMonth: todayInput().slice(0, 7), transactionMessage: "" });
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const load = () => api.get(`/cooperatives/${coop.id}/members/${m.id}/payments`).then((r) => setHistory(r.data)).catch(() => setHistory([]));
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [m.id]);
+
+  async function save(e) {
+    e.preventDefault(); setError(""); setNotice(""); setBusy(true);
+    try {
+      const { data } = await api.post(`/cooperatives/${coop.id}/members/${m.id}/payments`, { amount: Number(form.amount), forMonth: form.forMonth, transactionMessage: form.transactionMessage });
+      setForm({ ...form, amount: "", transactionMessage: "" });
+      setNotice(data.warnings?.length ? data.warnings.join(" ") : "Payment recorded.");
+      await load(); onChange();
+    } catch (err) { setError(err?.response?.data?.error || "Could not save the payment"); }
+    setBusy(false);
+  }
+  async function del(p) {
+    if (!window.confirm(`Remove the KES ${Number(p.amount).toLocaleString()} payment for ${prettyMonth(p.forMonth)}?`)) return;
+    setError("");
+    try { await api.delete(`/cooperatives/${coop.id}/members/${m.id}/payments/${p.id}`); await load(); onChange(); }
+    catch (err) { setError(err?.response?.data?.error || "Could not remove it"); }
+  }
+  const cls = "rounded-md border border-gray-300 px-2 py-1 text-sm";
+  return (
+    <tr className="border-t border-gray-100 bg-gray-50">
+      <td colSpan={colSpan} className="px-4 py-3">
+        {isAdmin && (
+          <form onSubmit={save} className="mb-3 flex flex-wrap items-start gap-2">
+            <input required type="number" min="1" step="0.01" placeholder="Amount (KES)" className={cls + " w-36"} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+            <input required type="month" max={todayInput().slice(0, 7)} className={cls} value={form.forMonth} onChange={(e) => setForm({ ...form, forMonth: e.target.value })} />
+            <textarea required rows={2} placeholder="Paste the transaction message (e.g. the M-Pesa confirmation)" className={cls + " min-w-[18rem] flex-1"} value={form.transactionMessage} onChange={(e) => setForm({ ...form, transactionMessage: e.target.value })} />
+            <button disabled={busy} className="rounded-md bg-kenya-green px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : "Save payment"}</button>
+          </form>
+        )}
+        {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+        {notice && <p className="mb-2 text-xs text-kenya-green">{notice}</p>}
+        {history === null ? <p className="text-xs text-gray-400">Loading…</p> : history.length === 0 ? <p className="text-xs text-gray-400">No hand-recorded payments yet.</p> : (
+          <table className="w-full text-xs">
+            <thead className="text-left uppercase text-gray-400"><tr><th className="py-1">Month</th><th>Amount</th><th>Receipt</th>{isAdmin && <th>Transaction message</th>}<th></th></tr></thead>
+            <tbody>
+              {history.map((p) => (
+                <tr key={p.id} className="border-t border-gray-200 align-top">
+                  <td className="py-1 pr-3">{prettyMonth(p.forMonth)}</td><td className="pr-3">KES {Number(p.amount).toLocaleString()}</td><td className="pr-3 font-mono">{p.receipt || "—"}</td>
+                  {isAdmin && <td className="pr-3 text-gray-600">{p.transactionMessage}</td>}
+                  <td className="text-right">{isAdmin && <button onClick={() => del(p)} className="text-kenya-red hover:underline">Remove</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 function MembersTab({ coop, onChange }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "NATIONAL_ADMIN";
+  const [openPay, setOpenPay] = useState(null);
   const [form, setForm] = useState({ legalName: "", nationalId: "", phoneNumber: "", gender: "MALE", shareCapital: 0 });
   const [error, setError] = useState("");
   const [issued, setIssued] = useState(null); // { name, password } shown once
@@ -318,21 +383,29 @@ function MembersTab({ coop, onChange }) {
               <th className="px-4 py-2">National ID</th>
               <th className="px-4 py-2">Gender</th>
               <th className="px-4 py-2">Share Capital</th>
+              <th className="px-4 py-2">Payments</th>
               <th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {(coop.members || []).map((m) => (
-              <tr key={m.id} className="border-t border-gray-100">
+              <Fragment key={m.id}>
+              <tr className="border-t border-gray-100">
                 <td className="px-4 py-2 font-medium">{m.legalName}</td>
                 <td className="px-4 py-2">{m.nationalId}</td>
                 <td className="px-4 py-2">{m.gender}</td>
                 <td className="px-4 py-2">KES {Number(m.shareCapital).toLocaleString()}</td>
+                <td className="px-4 py-2 text-xs">
+                  {m.payments?.last ? <span>KES {Number(m.payments.last.amount).toLocaleString()} <span className="text-gray-400">· {prettyMonth(m.payments.last.forMonth)}</span></span> : <span className="text-gray-400">None recorded</span>}
+                  {(isAdmin || m.payments?.count > 0) && <button onClick={() => setOpenPay(openPay === m.id ? null : m.id)} className="ml-2 font-medium text-kenya-green hover:underline">{isAdmin ? (openPay === m.id ? "Close" : "Record / view") : (openPay === m.id ? "Close" : "View")}</button>}
+                </td>
                 <td className="px-4 py-2 text-right"><button onClick={() => resetPassword(m)} className="whitespace-nowrap text-xs font-medium text-kenya-green hover:underline">Reset password</button></td>
               </tr>
+              {openPay === m.id && <PaymentRow coop={coop} m={m} isAdmin={isAdmin} onChange={onChange} colSpan={6} />}
+              </Fragment>
             ))}
             {(coop.members || []).length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">No members yet.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">No members yet.</td></tr>
             )}
           </tbody>
         </table>

@@ -31,75 +31,6 @@ async function coopIdsInArea(user) {
   return coops.map((c) => c.id);
 }
 
-// --- Leave requests ---
-
-const leaveSchema = z.object({
-  leaveType: z.string().min(1),
-  startDate: z.coerce.date(),
-  endDate: z.coerce.date(),
-  reason: z.string().optional(),
-});
-
-async function applyLeave(req, res) {
-  const data = leaveSchema.parse(req.body);
-  if (data.endDate < data.startDate) throw httpError(400, "The end date is before the start date");
-  const leave = await prisma.leaveRequest.create({
-    data: { ...data, applicantId: req.user.id },
-  });
-  res.status(201).json(leave);
-}
-
-async function listLeave(req, res) {
-  const { mine } = req.query;
-  let where;
-  if (mine === "true" || req.user.role === "FIELD_OFFICER") {
-    where = { applicantId: req.user.id };
-  } else if (req.user.role === "NATIONAL_ADMIN") {
-    where = {};
-  } else {
-    where = { applicantId: { in: await staffIdsInArea(req.user) } };
-  }
-  const leaves = await prisma.leaveRequest.findMany({
-    where,
-    include: { applicant: { select: { id: true, fullName: true } } },
-    orderBy: { createdAt: "desc" },
-  });
-  res.json(leaves);
-}
-
-async function decideLeave(req, res) {
-  const { approve, decisionNote } = z
-    .object({ approve: z.boolean(), decisionNote: z.string().optional() })
-    .parse(req.body);
-
-  const existing = await prisma.leaveRequest.findUnique({ where: { id: req.params.id } });
-  if (!existing) throw httpError(404, "Leave request not found");
-  if (existing.applicantId === req.user.id) throw httpError(403, "You can't decide your own leave request");
-  if (existing.status !== "PENDING") throw httpError(409, "This leave request has already been decided");
-  const applicant = await prisma.user.findUnique({ where: { id: existing.applicantId } });
-  if (req.user.role !== "NATIONAL_ADMIN" && (!applicant || applicant.countyId !== req.user.countyId || !inArea(req.user, applicant))) {
-    throw httpError(403, "This leave request is outside your area");
-  }
-
-  const leave = await prisma.leaveRequest.update({
-    where: { id: req.params.id },
-    data: {
-      status: approve ? "APPROVED" : "REJECTED",
-      approverId: req.user.id,
-      decisionNote,
-    },
-  });
-
-  await recordAudit({
-    userId: req.user.id,
-    action: approve ? "APPROVE_LEAVE" : "REJECT_LEAVE",
-    entityType: "LeaveRequest",
-    entityId: leave.id,
-  });
-
-  res.json(leave);
-}
-
 // --- Field visit planner ---
 
 const visitSchema = z.object({
@@ -216,9 +147,6 @@ async function addVisitPhotos(req, res) {
 }
 
 module.exports = {
-  applyLeave,
-  listLeave,
-  decideLeave,
   planVisit,
   listVisits,
   decideVisit,

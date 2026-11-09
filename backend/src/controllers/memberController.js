@@ -68,7 +68,8 @@ async function listContributions(req, res) {
     where: { memberId: req.member.id },
     orderBy: { contributionDate: "desc" },
   });
-  res.json(contributions);
+  // The pasted transaction message is staff-only (it can carry other people's details).
+  res.json(contributions.map(({ transactionMessage, ...c }) => c));
 }
 
 async function listProduce(req, res) {

@@ -9,10 +9,8 @@ router.use(authenticate);
 // (who sign in through the Cooperative Portal) have no access here.
 router.use(requireRole("NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER", "FIELD_OFFICER"));
 
-// Leave
-router.get("/leave", ctrl.listLeave);
-router.post("/leave", ctrl.applyLeave);
-router.post("/leave/:id/decision", requireRole("NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"), ctrl.decideLeave);
+// Leave moved to /api/leave (chain of command, leave application form). The old
+// approve-by-role endpoints are gone on purpose: they bypassed the chain.
 
 // Field visits
 router.get("/visits", ctrl.listVisits);

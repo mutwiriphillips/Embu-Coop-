@@ -10,7 +10,7 @@ const LINKS = [
   { href: "/dashboard", label: "Dashboard", roles: STAFF_ONLY },
   { href: "/cooperatives", label: "Cooperatives", roles: [...STAFF_ONLY, "OTHER_STAFF"] },
   { href: "/field-ops", label: "Field Visits", roles: STAFF_ONLY },
-  { href: "/leave", label: "Leave", roles: STAFF_ONLY },
+  { href: "/leave", label: "Leave", roles: [...STAFF_ONLY, "OTHER_STAFF"] },
   { href: "/disbursements", label: "Farmer Disbursements", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },
   { href: "/season-rates", label: "Crop Season Rates", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER", "FIELD_OFFICER"] },
   { href: "/factories", label: "Factories", roles: ["NATIONAL_ADMIN", "DIRECTOR", "SUBCOUNTY_OFFICER"] },

@@ -298,3 +298,16 @@ the Governor's office, not an assumption.
 - [ ] Farmer Disbursements: expanding a society shows its season rate and the factory
 - [ ] Import CSV: download the template, change a price, upload, Check file shows the change, Confirm and save; the table updates
 - [ ] A file with a misspelt society name saves nothing and names the row; 'Skip societies I can't match' saves the rest
+
+## Hand-recorded member payments
+- [ ] National Admin: society -> Members -> Payments -> Record / view; enter amount, month and a pasted M-Pesa message; the column then shows the amount and month
+- [ ] The same message pasted again is refused (duplicate receipt)
+- [ ] Director, Sub-County Officer, Field Officer and a cooperative manager see the column and history but no entry form, and no transaction message; the API returns 403 for them
+- [ ] The member's portal contribution history shows the payment, without the message
+
+## Leave application
+- [ ] In Staff Directory, link a Field Officer's login (profile > Login account) and set reporting lines FO > Sub-County Officer > Director.
+- [ ] FO applies: Part I fills from the directory, "Thro'" lists the supervisor then the Director; submit is blocked without the outside-Kenya tick or more days than available.
+- [ ] Director cannot act first; Sub-County Officer recommends (must name who covers); then Director approves; Part IV shows and the note is at the bottom.
+- [ ] Brought-forward above half the entitlement (or over 15) is refused on the Leave account panel.
+- [ ] Print / Save as PDF looks like the paper form.

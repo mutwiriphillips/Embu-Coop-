@@ -3,6 +3,7 @@ const { authenticate, requireRole, requirePermission, requireCooperativeAccess }
 const ctrl = require("../controllers/cooperativeController");
 const importCtrl = require("../controllers/importController");
 const sheetCtrl = require("../controllers/cooperativeSheetController");
+const payCtrl = require("../controllers/memberPaymentController");
 const factoryCtrl = require("../controllers/factoryController");
 const { upload } = require("../utils/fileStorage");
 
@@ -47,6 +48,10 @@ router.post("/:id/members/bulk", requireCooperativeAccess(), requirePermission("
 router.post("/:id/members", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.addMember);
 router.patch("/:id/members/:memberId", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.updateMember);
 router.post("/:id/members/:memberId/reset-password", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.resetMemberPassword);
+// Hand-keyed member payments (amount, month paid, transaction message): ONLY the National Admin may record or remove them.
+router.get("/:id/members/:memberId/payments", requireCooperativeAccess(), requirePermission("cooperatives", "canView"), payCtrl.list);
+router.post("/:id/members/:memberId/payments", requireRole("NATIONAL_ADMIN"), requireCooperativeAccess(), payCtrl.record);
+router.delete("/:id/members/:memberId/payments/:paymentId", requireRole("NATIONAL_ADMIN"), requireCooperativeAccess(), payCtrl.remove);
 router.delete("/:id/members/:memberId", requireCooperativeAccess(), requirePermission("cooperatives", "canEdit"), ctrl.removeMember);
 
 module.exports = router;

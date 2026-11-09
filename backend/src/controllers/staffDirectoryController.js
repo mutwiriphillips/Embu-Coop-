@@ -87,6 +87,7 @@ async function getOne(req, res) {
     reportsTo: s.reportsToId ? brief(colleagues.find((x) => x.id === s.reportsToId) || { id: s.reportsToId, fullName: "(not in this county)", designation: "" }) : null,
     directReports: colleagues.filter((x) => x.reportsToId === s.id).map(brief),
     reportsToOptions: canManage(req.user, s) ? colleagues.filter((x) => x.id !== s.id).map(brief) : [],
+    account: s.userId ? await (async () => { const u = await prisma.user.findUnique({ where: { id: s.userId } }); return u ? { id: u.id, fullName: u.fullName, email: u.email, role: u.role } : null; })() : null,
     history,
     transfers,
     transfer: {
@@ -273,6 +274,31 @@ async function setReportsTo(req, res) {
   res.json(toPublic(updated, req.user));
 }
 
+// GET /api/staff-directory/:id/account-options  (logins that can be linked to this person)
+async function accountOptions(req, res) {
+  const s = await load(req);
+  if (!canManage(req.user, s)) throw httpError(403, "You can't link a login for this person");
+  const taken = new Set((await prisma.staffMember.findMany({ where: { userId: { not: null } } })).filter((x) => x.id !== s.id).map((x) => x.userId));
+  const users = await prisma.user.findMany({ where: { active: true, countyId: s.countyId }, orderBy: { fullName: "asc" } });
+  res.json(users.filter((u) => u.role !== "COOPERATIVE_MANAGER" && !taken.has(u.id)).map((u) => ({ id: u.id, fullName: u.fullName, email: u.email, role: u.role })));
+}
+
+// PUT /api/staff-directory/:id/account  { userId | null }  links this person to their login (needed for the leave chain)
+async function setAccount(req, res) {
+  const s = await load(req);
+  if (!canManage(req.user, s)) throw httpError(403, "You can't link a login for this person");
+  const { userId } = z.object({ userId: z.string().uuid().nullable() }).parse(req.body);
+  if (userId) {
+    const u = await prisma.user.findUnique({ where: { id: userId } });
+    if (!u || !u.active || u.role === "COOPERATIVE_MANAGER" || u.countyId !== s.countyId) throw httpError(400, "Choose an active staff login in the same county");
+    const other = await prisma.staffMember.findFirst({ where: { userId } });
+    if (other && other.id !== s.id) throw httpError(409, `That login is already linked to ${other.fullName}`);
+  }
+  const updated = await prisma.staffMember.update({ where: { id: s.id }, data: { userId } });
+  await recordAudit({ userId: req.user.id, action: userId ? "STAFF_ACCOUNT_LINKED" : "STAFF_ACCOUNT_UNLINKED", entityType: "StaffMember", entityId: s.id });
+  res.json(toPublic(updated, req.user));
+}
+
 // POST /api/staff-directory/transfers/:tid/cancel
 async function cancel(req, res) {
   const t = await prisma.staffTransfer.findUnique({ where: { id: req.params.tid } });
@@ -345,4 +371,4 @@ async function importRoster(req, res) {
   res.json({ ...result, total: ROSTER.length });
 }
 
-module.exports = { COUNTY_OFFICES, MINISTRY_STATION, STATUS_LABEL, override, setReportsTo, list, getOne, setStatus, edit, propose, decide, cancel, listTransfers, meritRanking, importRoster, effectiveStatus, scopeWhere };
+module.exports = { accountOptions, setAccount, COUNTY_OFFICES, MINISTRY_STATION, STATUS_LABEL, override, setReportsTo, list, getOne, setStatus, edit, propose, decide, cancel, listTransfers, meritRanking, importRoster, effectiveStatus, scopeWhere };

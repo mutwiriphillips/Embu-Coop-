@@ -20,6 +20,8 @@ router.post("/import-roster", requireRole("NATIONAL_ADMIN", "DIRECTOR"), c.impor
 router.get("/:id", viewers, c.getOne);
 router.patch("/:id", requireRole("NATIONAL_ADMIN", "DIRECTOR"), c.edit);
 router.put("/:id/status", viewers, c.setStatus);
+router.get("/:id/account-options", viewers, c.accountOptions);
+router.put("/:id/account", viewers, c.setAccount);
 router.put("/:id/reports-to", viewers, c.setReportsTo);
 router.post("/:id/transfers", viewers, c.propose);
 

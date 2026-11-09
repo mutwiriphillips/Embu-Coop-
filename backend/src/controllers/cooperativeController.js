@@ -7,6 +7,7 @@ const { resetToTemporary } = require("../utils/accountPassword");
 const { withLiveStatus } = require("../utils/governance");
 const { optionalDate, phoneSchema, nationalIdSchema } = require("../utils/validators");
 const { complianceFor } = require("../utils/cooperativeCompliance");
+const { paymentSummary } = require("./memberPaymentController");
 
 // Two societies can't share a name in one county (the Registrar doesn't allow
 // it), and two entries with the same name are almost always an accidental
@@ -122,7 +123,9 @@ async function getCooperative(req, res) {
   // Committee status is recomputed from today's date (the stored value goes
   // stale as terms run out), and the committee in force is marked current.
   const [compliance] = [(await complianceFor(prisma, [coop])).get(coop.id)];
-  res.json({ ...coop, committees: withLiveStatus(coop.committees), compliance, factories: (coop.factories || []).map((l) => ({ id: l.factory.id, name: l.factory.name, valueChain: l.factory.valueChain, location: l.factory.location })) });
+  const pays = await paymentSummary(coop.id);
+  const members = (coop.members || []).map((m) => ({ ...m, payments: pays.get(m.id) || { count: 0, total: 0, last: null } }));
+  res.json({ ...coop, members, committees: withLiveStatus(coop.committees), compliance, factories: (coop.factories || []).map((l) => ({ id: l.factory.id, name: l.factory.name, valueChain: l.factory.valueChain, location: l.factory.location })) });
 }
 
 async function createCooperative(req, res) {
@@ -253,7 +256,8 @@ async function listMembers(req, res) {
     include: { account: { select: { id: true } } },
   });
   // Only whether a portal account exists is sent, never anything from it.
-  res.json(members.map(({ account, ...m }) => ({ ...m, hasAccount: Boolean(account) })));
+  const pays = await paymentSummary(req.params.id);
+  res.json(members.map(({ account, ...m }) => ({ ...m, hasAccount: Boolean(account), payments: pays.get(m.id) || { count: 0, total: 0, last: null } })));
 }
 
 async function addMember(req, res) {

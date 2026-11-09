@@ -429,3 +429,10 @@ Adds two tables (`Factory`, `CooperativeFactory`). The change is additive only: 
 ## Schema note: crop season rates
 
 Adds two tables (`CropSeasonRecord`, `CropSeasonRound`). Additive only: the normal `prisma db push` on deploy creates them and no existing row is touched. Nothing to seed. The Director enters the figures under **Crop Season Rates**.
+
+## Schema note: hand-recorded member payments
+
+Adds two optional columns to `Contribution` (`forMonth`, `transactionMessage`) and an index. Additive: existing rows are untouched and the normal `prisma db push` applies it. Nothing to seed.
+
+## Schema note: leave application chain
+Additive `prisma db push`: new columns on `LeaveRequest` (applicant snapshot, days, year, mobile, current step, Part IV figures), new enum value `CANCELLED` on `LeaveStatus`, and new tables `LeaveStep` and `LeaveAccount`. Existing leave rows are kept; old pending ones get a Head-of-Department step the first time they are opened.

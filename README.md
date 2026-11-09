@@ -519,6 +519,16 @@ A separate directory (sidebar -> **Crop Season Rates**) holding, for each societ
 - **Feeds the other dashboards:** the factory chosen is also linked to the society (it shows on the society page and the Farmer Disbursements dashboard), and the dashboard's expanded row shows the society's latest season rates beside the quantity and average price actually delivered.
 - Prices are typed in by the County; nothing is estimated. A society with no entry shows "Not yet". API: `GET /api/season-rates?valueChain=&cropYear=&countyId=`, `PUT /api/season-rates/bulk`, `DELETE /api/season-rates/:cooperativeId?cropYear=`. **Import CSV (Director / National Admin):** *Import CSV* takes the county's own price list (CSV, semicolon CSV or Excel) or the downloadable template, pre-filled with the societies and current prices. Columns: society name, an optional Factory, and one column per payment headed like `Av. payment (1)`, `(2)`... Names are matched to registered societies ignoring numbering, FCS/F.C.S spelling and word order; an ambiguous name is flagged, never guessed. **Check file** shows what would change (nothing is written); **Confirm and save** applies it. 'Not yet', `-` and empty cells change nothing (an import never erases a price); a bad price or unknown society saves nothing and lists the rows (or tick *Skip societies I can't match*); a factory name that doesn't exist yet is created. Endpoints: `GET /api/season-rates/template`, `POST /api/season-rates/import`. Data model: `CropSeasonRecord` and `CropSeasonRound` (the backup includes both).
 
+## Hand-recorded Member Payments (National Admin only)
+
+Before the M-Pesa integration, the **National Admin** can key in a member's payment by hand: open a cooperative -> **Members** -> the new **Payments** column -> **Record / view**, then enter the **amount paid**, the **month paid** and the **transaction message** (paste the M-Pesa confirmation). **No other role can record or remove one** (the Director, Sub-County and Field Officers and cooperative managers are refused by the server, not just hidden).
+
+- The Payments column shows each member's latest recorded payment (amount and month); anyone who can open the society can see that, and a history of amounts, months and receipt codes.
+- **The pasted transaction message is visible to the National Admin only** (it can contain phone numbers and names). It is also hidden from the member portal and the general contributions list.
+- A receipt code (e.g. `SJK4X7ABCD`) is read from the message and **the same receipt can't be entered twice**. If the amount in the message differs from the amount typed, a warning is shown. A wrong entry is corrected with **Remove** (audited) and re-entering it.
+- These are ordinary monthly contributions (with the month and message attached), so the member's own contribution history, the society's contribution totals and the credit score count them with no second entry. When the M-Pesa integration arrives it fills the same fields.
+- Endpoints: `POST/GET /api/cooperatives/:id/members/:memberId/payments`, `DELETE .../payments/:paymentId`. The audit log records the amount and month, never the message.
+
 ## Open Items From Scope (to confirm with County before Phase 2)
 
 See `docs/Embu_Coop_Engineering_Scope.pdf`, Section 6 — sub-county/ward list,
@@ -548,3 +558,17 @@ Read [`SECURITY_ASSESSMENT.md`](./SECURITY_ASSESSMENT.md) first.
 Always on, in both modes: self-service *Change password* (farmers, agrovets, staff), staff-issued one-time temporary passwords, sign-in rate limits, security headers, session revocation on password change, open sign-up off, no `--accept-data-loss` on deploys. There is no self-service "forgot password" yet (needs an SMS/email provider).
 
 Moving to the county domain: follow [`DOMAIN_SMOKE_CHECKLIST.md`](./DOMAIN_SMOKE_CHECKLIST.md).
+
+## Leave application (chain of command)
+
+Staff apply on the County's **Leave Application Form** (`/leave`). The form is reproduced on screen and prints / saves as PDF (`/leave/:id`).
+
+- **Part I** is filled by the applicant (type, dates, mobile, the outside-Kenya acknowledgement is mandatory). Name, P/No and designation come from the Staff Directory.
+- **Part II**: the application goes to the immediate supervisor, then each supervisor above them in the Staff Directory reporting lines. Each recommends or does not recommend (with remarks) and it moves on. The first supervisor names who performs the duties meanwhile.
+- **Part III**: the Head of Department (the county Director; the National Admin for a Director's own leave) approves or does not approve. This is the final decision.
+- **Part IV** is computed by the system at approval (brought forward, entitlement, taken, this leave, balance carried forward).
+- Turn order is enforced on the server: nobody can act out of turn, act on their own leave, or act outside their county. Sign-off is electronic and time-stamped. The Head can pass over a stuck supervisor (reason recorded). Applicants can withdraw while it is in progress.
+- **The form's note is enforced**: at most half the entitlement, and never more than 15 days, carries into the next year; the rest is forfeited automatically. The Director/National Admin cannot set a brought-forward figure above that cap.
+- The applicant's login must be linked to their Staff Directory record (Staff Directory profile, "Login account"; auto-linked when the emails match). Supervisors without a login are passed over and noted on the form.
+- Assumptions to confirm: default entitlement 21 working days (`LEAVE_DEFAULT_ENTITLEMENT`, editable per person under "Leave account"); Annual leave counts Mon-Fri and does not exclude public holidays; Maternity/Paternity count calendar days and do not use the annual entitlement.
+- The old `/api/field-ops/leave` endpoints (which let a role approve without the chain) were removed. Sick and Compassionate types are no longer offered; the form has Annual, Maternity and Paternity only.

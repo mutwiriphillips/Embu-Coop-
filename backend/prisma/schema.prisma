@@ -125,22 +125,91 @@ enum LeaveStatus {
   PENDING
   APPROVED
   REJECTED
+  CANCELLED
 }
 
 model LeaveRequest {
   id           String      @id @default(uuid())
   applicantId  String
   applicant    User        @relation("LeaveApplicant", fields: [applicantId], references: [id])
-  leaveType    String // annual, sick, compassionate, etc.
+  leaveType    String // Annual / Maternity / Paternity (older rows may hold other words)
   startDate    DateTime
   endDate      DateTime
   reason       String?
   status       LeaveStatus @default(PENDING)
-  approverId   String?
+  approverId   String? // the Head of Department who made the final decision
   approver     User?       @relation("LeaveApprover", fields: [approverId], references: [id])
   decisionNote String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
+
+  // ---- Leave application form (Part I): snapshot of the applicant at submission
+  staffMemberId      String?
+  applicantName      String?
+  applicantPNo       String?
+  applicantDesignation String?
+  days               Int? // working days (Annual) or calendar days (Maternity / Paternity)
+  year               Int? // leave year the days are charged to
+  mobile             String? // address during leave (mobile no.)
+  outsideKenyaAck    Boolean  @default(false) // Personnel Circular No. 6 of 15 January 1967
+  // Part II: who performs the duties meanwhile (given by the immediate supervisor)
+  reliefName         String?
+  reliefPNo          String?
+  reliefDesignation  String?
+  // Where it is in the chain of command (stepNo of the step waiting for action)
+  currentStepNo      Int?
+  chainSkipped       String? // supervisors passed over because they have no login
+  decidedAt          DateTime?
+  // Part IV: leave computation, fixed at the moment of the final decision
+  compBroughtForward Int?
+  compEntitlement    Int?
+  compTaken          Int?
+  compDeducted       Int?
+  compBalance        Int?
+  compCarried        Int?
+  compForfeited      Int?
+
+  steps              LeaveStep[]
+
+  @@index([applicantId])
+  @@index([status])
+}
+
+// One sign-off in the chain: each supervisor (Part II), then the Head of Department (Part III).
+model LeaveStep {
+  id                 String   @id @default(uuid())
+  leaveId            String
+  leave              LeaveRequest @relation(fields: [leaveId], references: [id], onDelete: Cascade)
+  stepNo             Int
+  kind               String // SUPERVISOR | HEAD
+  approverId         String? // SUPERVISOR: the person who must act. HEAD: empty (any Director of the county / National Admin)
+  approverRole       String? // HEAD: DIRECTOR | NATIONAL_ADMIN
+  approverName       String?
+  approverDesignation String?
+  decision           String? // RECOMMENDED | NOT_RECOMMENDED | APPROVED | NOT_APPROVED | SKIPPED
+  remarks            String?  @db.Text
+  actedById          String?
+  actedByName        String?
+  actedByDesignation String?
+  actedAt            DateTime?
+  createdAt          DateTime @default(now())
+
+  @@unique([leaveId, stepNo])
+}
+
+// A person's leave year: days brought forward and the yearly entitlement.
+// Brought forward is capped by the civil service rule (half the entitlement, never above 15 days).
+model LeaveAccount {
+  id             String   @id @default(uuid())
+  staffMemberId  String
+  year           Int
+  broughtForward Int      @default(0)
+  entitlement    Int
+  setById        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([staffMemberId, year])
 }
 
 enum VisitStatus {
@@ -419,10 +488,15 @@ model Contribution {
   method           PaymentMethod    @default(CASH)
   externalRef      String? // e.g. M-Pesa receipt number, for future Daraja reconciliation
   contributionDate DateTime
+  // Payments the National Admin keys in by hand (before the M-Pesa integration):
+  // the month the money is for ("2026-10") and the pasted transaction message.
+  forMonth           String?
+  transactionMessage String?         @db.Text
   recordedById     String?
   recordedBy       User?            @relation("ContributionRecordedBy", fields: [recordedById], references: [id])
   createdAt        DateTime         @default(now())
 
+  @@index([cooperativeId, forMonth])
   @@index([memberId, contributionDate])
   @@index([cooperativeId, contributionDate])
 }
