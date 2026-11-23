@@ -311,3 +311,7 @@ the Governor's office, not an assumption.
 - [ ] Director cannot act first; Sub-County Officer recommends (must name who covers); then Director approves; Part IV shows and the note is at the bottom.
 - [ ] Brought-forward above half the entitlement (or over 15) is refused on the Leave account panel.
 - [ ] Print / Save as PDF looks like the paper form.
+
+## Factory import
+- [ ] Factories > Import: upload the coffee factories sheet, tick the two boxes, Check file; read the matches, then Confirm and save.
+- [ ] Open a society (e.g. Kibugu FCS): its factories are listed; the Farmer Disbursements dashboard shows them.
